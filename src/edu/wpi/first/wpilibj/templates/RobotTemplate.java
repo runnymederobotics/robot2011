@@ -20,20 +20,24 @@ public class RobotTemplate extends IterativeRobot {
     
     Joystick stickRight = new Joystick(1);
     Joystick stickLeft = new Joystick(2);
-
     Joystick stickOperator = new Joystick(3);
 
-    Victor vicRight = new Victor(1);
-    Victor vicLeft = new Victor(2);
-    Victor vicElevator = new Victor(3);
+    Compressor compressor = new Compressor(10, 1);
+
+    Jaguar jagLeftOne = new Jaguar(1);
+    Jaguar jagLeftTwo = new Jaguar(2);
+    Jaguar jagRightOne = new Jaguar(10);
+    Jaguar jagRightTwo = new Jaguar(4);
+
+    Victor vicElevator = new Victor(5);
 
     PIDEncoder encRight = new PIDEncoder(1, 2);
     PIDEncoder encLeft = new PIDEncoder(3, 4);
 
     Encoder encElevator = new Encoder(5, 6);
 
-    PIDController pidRight = new PIDController(0.0, 0.00003, 0.0, encRight, vicRight, 0.005);
-    PIDController pidLeft = new PIDController(0.0, -0.00003, 0.0, encLeft, vicLeft, 0.005);
+    PIDController pidRight = new PIDController(0.0, 0.00003, 0.0, encRight, jagRightOne, 0.005);
+    PIDController pidLeft = new PIDController(0.0, -0.00003, 0.0, encLeft, jagLeftOne, 0.005);
 
     class ElevatorState {
         static final int ground = 0;
@@ -55,6 +59,8 @@ public class RobotTemplate extends IterativeRobot {
 
         pidLeft.setInputRange(-COUNTS_PER_METRE, COUNTS_PER_METRE);
         pidLeft.setOutputRange(-1, 1);
+
+        compressor.start();
     }
 
     //Runs at the beginning of autonomous period
@@ -74,12 +80,14 @@ public class RobotTemplate extends IterativeRobot {
 
     //Runs at the beginning of teleoperated period
     public void teleopInit() {
-
+        
     }
 
     //Runs periodically during teleoperated period
     public void teleopPeriodic() {
-
+        System.out.println("rset: " + pidRight.getSetpoint() + " renc: " + encRight.pidGet());
+        System.out.println("lset: " + pidLeft.getSetpoint() + " lenc: " + encLeft.pidGet());
+        System.out.println("comp: " + compressor.enabled());
     }
 
     //Eleveator state machine
@@ -116,8 +124,14 @@ public class RobotTemplate extends IterativeRobot {
 
         elevatorStateMachine(setPoint);
 
-        pidLeft.setSetpoint(stickLeft.getAxis(Joystick.AxisType.kY));
-        pidRight.setSetpoint(stickRight.getAxis(Joystick.AxisType.kY));
-    }
+        //pidLeft.setSetpoint(stickLeft.getAxis(Joystick.AxisType.kY));
+        //pidRight.setSetpoint(stickRight.getAxis(Joystick.AxisType.kY));
 
+        jagLeftOne.set(stickLeft.getAxis(Joystick.AxisType.kY));
+        jagLeftTwo.set(stickLeft.getAxis(Joystick.AxisType.kY));
+        jagRightOne.set(-stickRight.getAxis(Joystick.AxisType.kY));
+        jagRightTwo.set(-stickRight.getAxis(Joystick.AxisType.kY));
+
+        compressor.setRelayValue(compressor.getPressureSwitchValue() ? Relay.Value.kReverse : Relay.Value.kOff);
+    }
 }
