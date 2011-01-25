@@ -10,6 +10,7 @@ public class RobotTemplate extends IterativeRobot {
     //Buttons on the driver joystick
     class Driver {
         static final int TRANS_TOGGLE = 1;
+        static final int ARCADE_TOGGLE = 2;
     }
 
     //Buttons on the operator joystick
@@ -48,8 +49,10 @@ public class RobotTemplate extends IterativeRobot {
     Victor vicElevator = new Victor(5);
 
     //Encoders
-    PIDEncoder encRight = new PIDEncoder(1, 2);
-    PIDEncoder encLeft = new PIDEncoder(3, 4);
+    PIDEncoder encRight = new PIDEncoder(1, 2, true);
+    PIDEncoder encLeft = new PIDEncoder(3, 4, true);
+
+    RobotDrive robotDrive = new RobotDrive(jagLeftOne, jagLeftTwo, jagRightOne, jagRightTwo);
 
     //Encoder encElevator = new Encoder(5, 6);
 
@@ -64,13 +67,18 @@ public class RobotTemplate extends IterativeRobot {
 
     //Toggle variables for the gripper button
     BooleanHolder gripperReleased = new BooleanHolder();
-    //False means that it defaults to being open
+    //False means that it defaults to being closed
     BooleanHolder gripperDirection = new BooleanHolder(false);
 
     //Toggle variables for the elbow button
     BooleanHolder elbowReleased = new BooleanHolder();
-    //False means that it defaults to being open
+    //False means that it defaults to being closed
     BooleanHolder elbowDirection = new BooleanHolder(false);
+
+    //Toggle variables for arcade/tank drive
+    BooleanHolder arcadeReleased = new BooleanHolder();
+    //False means that it defaults to being tank drive
+    BooleanHolder arcadeDrive = new BooleanHolder(true);
 
     class ElevatorState {
         static final int ground = 0;
@@ -148,7 +156,7 @@ public class RobotTemplate extends IterativeRobot {
 
     //Runs periodically during teleoperated period
     public void teleopPeriodic() {
-        System.out.println("renc: " + encRight.pidGet() + " lenc: " + encLeft.pidGet());
+        System.out.println("renc: " + encRight.encoder.get() + " lenc: " + encLeft.encoder.get());
         System.out.println("trans: " + transDirection.get() + " gripper: " + gripperDirection.get() + " elbow: " + elbowDirection.get());
     }
 
@@ -203,26 +211,31 @@ public class RobotTemplate extends IterativeRobot {
         //Drive the elevator based on the y axis of the operator joystick
         vicElevator.set(stickOperator.getAxis(Joystick.AxisType.kY));
 
-        //Drive left victors based on the left axis of the joystick
-        jagLeftOne.set(stickDriver.getRawAxis(2));
-        jagLeftTwo.set(stickDriver.getRawAxis(2));
-
-        //Drive right victors based on the right axis of the joystick
-        jagRightOne.set(-stickDriver.getRawAxis(4));
-        jagRightTwo.set(-stickDriver.getRawAxis(4));
-
         //Add a toggle on the transmission shifter button
         toggle(transDirection, stickDriver.getRawButton(Driver.TRANS_TOGGLE), transReleased);
-        //Add a toggle on the gripper button
-        toggle(gripperDirection, stickOperator.getRawButton(Operator.GRIPPER_TOGGLE), gripperReleased);
-        //Add a toggle on the elbow button
-        toggle(elbowDirection, stickOperator.getRawButton(Operator.ELBOW_TOGGLE), elbowReleased);
-
         //Set the transmission shifter to open or closed based on the state of the toggle
         transmissionShift.set(transDirection.get() ? Relay.Value.kForward : Relay.Value.kReverse);
+
+        //Add a toggle on the gripper button
+        toggle(gripperDirection, stickOperator.getRawButton(Operator.GRIPPER_TOGGLE), gripperReleased);
         //Set the gripper to open or closed based on the state of the toggle
         gripper.set(gripperDirection.get() ? Relay.Value.kForward : Relay.Value.kReverse);
+
+        //Add a toggle on the elbow button
+        toggle(elbowDirection, stickOperator.getRawButton(Operator.ELBOW_TOGGLE), elbowReleased);
         //Set the elbow to open or closed based on the state of the toggle
         elbow.set(elbowDirection.get() ? Relay.Value.kForward : Relay.Value.kReverse);
+
+        //Add a toggle on the arcade/tank drive button
+        toggle(arcadeDrive, stickDriver.getRawButton(Driver.ARCADE_TOGGLE), arcadeReleased);
+        //Drive arcade or tank based on the state of the toggle
+        if(arcadeDrive.get()) {
+            //Move axis is 2 on stickDriver (first y-axis) and rotate axis is 3 on stickDriver (second x-axis)
+            robotDrive.arcadeDrive(stickDriver, 2, stickDriver, 3);
+        }
+        else {
+            //Left motors controlled by axis 2 on stickDriver (first y axis) and right motors controlled by axis 4 on stickDriver (second y-axis)
+            robotDrive.tankDrive(stickDriver.getRawAxis(2), stickDriver.getRawAxis(4));
+        }
     }
 }
