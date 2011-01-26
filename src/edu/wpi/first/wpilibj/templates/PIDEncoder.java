@@ -20,6 +20,10 @@ public class PIDEncoder implements PIDSource {
         this(aChannel, bChannel, false, Encoder.EncodingType.k1X);
     }
 
+    public void start() {
+        encoder.start();
+    }
+
     //Function must be overrided, and the return value is the rate of the encoder
     public double pidGet() {
         return encoder.getRate();

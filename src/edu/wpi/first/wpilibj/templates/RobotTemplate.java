@@ -3,17 +3,20 @@ package edu.wpi.first.wpilibj.templates;
 import edu.wpi.first.wpilibj.*;
 
 public class RobotTemplate extends IterativeRobot {
-    
+
+    //Encoder counts per metre travelled by the robot
     static final double COUNTS_PER_METRE = 900.0;
+
+    //Speed to set the elevator motor to
     static final double ELEVATOR_SPEED = 1.0;
 
-    //Buttons on the driver joystick
+    //Driver joystick
     class Driver {
         static final int TRANS_TOGGLE = 1;
         static final int ARCADE_TOGGLE = 2;
     }
 
-    //Buttons on the operator joystick
+    //Operator joystick
     class Operator {
         static final int ELEVATOR_STATE_GROUND = 1;
         static final int ELEVATOR_STATE_FEED = 2;
@@ -52,35 +55,33 @@ public class RobotTemplate extends IterativeRobot {
     PIDEncoder encRight = new PIDEncoder(1, 2, true);
     PIDEncoder encLeft = new PIDEncoder(3, 4, true);
 
+    //Provides drive functions (arcade and tank drive)
     RobotDrive robotDrive = new RobotDrive(jagLeftOne, jagLeftTwo, jagRightOne, jagRightTwo);
 
     //Encoder encElevator = new Encoder(5, 6);
 
     //PID
-    //PIDController pidRight = new PIDController(0.0, 0.00003, 0.0, encRight, jagRightOne, 0.005);
-    //PIDController pidLeft = new PIDController(0.0, -0.00003, 0.0, encLeft, jagLeftOne, 0.005);
+    PIDController pidRight = new PIDController(0.0, 0.00003, 0.0, encRight, jagRightOne, 0.005);
+    PIDController pidLeft = new PIDController(0.0, -0.00003, 0.0, encLeft, jagLeftOne, 0.005);
 
-    //Toggle variables for the transmission shifter button
-    BooleanHolder transReleased = new BooleanHolder();
-    //True means that it defaults to being open
-    BooleanHolder transDirection = new BooleanHolder(true);
+    //Toggle for the transmission shifter button
+    //Default is open -- low gear
+    Toggle transToggle = new Toggle(true);
 
-    //Toggle variables for the gripper button
-    BooleanHolder gripperReleased = new BooleanHolder();
-    //False means that it defaults to being closed
-    BooleanHolder gripperDirection = new BooleanHolder(false);
+    //Toggle for the gripper button
+    //Default is closed -- gripper is closed
+    Toggle gripperToggle = new Toggle(false);
 
-    //Toggle variables for the elbow button
-    BooleanHolder elbowReleased = new BooleanHolder();
-    //False means that it defaults to being closed
-    BooleanHolder elbowDirection = new BooleanHolder(false);
+    //Toggle for the elbow button
+    //Default is closed -- elbow is up
+    Toggle elbowToggle = new Toggle(false);
 
-    //Toggle variables for arcade/tank drive
-    BooleanHolder arcadeReleased = new BooleanHolder();
-    //False means that it defaults to being tank drive
-    BooleanHolder arcadeDrive = new BooleanHolder(true);
+    //Toggle for arcade/tank drive
+    //Default is tank drive
+    Toggle arcadeToggle = new Toggle(false);
 
-    class ElevatorState {
+    //Enumeration of setpoints for different heights of the elevator
+    class ElevatorSetpoint {
         static final int ground = 0;
         static final int feed = 1;
         static final int posOne = 2;
@@ -91,45 +92,22 @@ public class RobotTemplate extends IterativeRobot {
         static final int posSix = 7;
     }
 
-    int curElevatorState = ElevatorState.ground;
-
-    //A boolean object, who's value can be changed from inside a function
-    public class BooleanHolder {
-        //Value of object
-        boolean value;
-
-        //Defaults to false
-        public BooleanHolder() {
-            value = false;
-        }
-
-        //Overloaded constructor to take any value of boolean
-        public BooleanHolder(boolean val) {
-            value = val;
-        }
-
-        //Get boolean
-        public final boolean get() {
-            return value;
-        }
-
-        //Set boolean
-        public void set(boolean val) {
-            value = val;
-        }
-    }
+    //The elevator setpoint, determined by which button on the operator joystick is pressed
+    int elevatorSetpoint = ElevatorSetpoint.ground;
 
     //Runs when the robot is turned
     public void robotInit() {
         //Start both of the drive encoders
-        encRight.encoder.start();
-        encLeft.encoder.start();
+        encRight.start();
+        encLeft.start();
 
-        /*pidRight.setInputRange(-COUNTS_PER_METRE, COUNTS_PER_METRE);
+        //Input/output range for right encoder/motors
+        pidRight.setInputRange(-COUNTS_PER_METRE, COUNTS_PER_METRE);
         pidRight.setOutputRange(-1, 1);
 
+        //Input/output range for left encoder/motors
         pidLeft.setInputRange(-COUNTS_PER_METRE, COUNTS_PER_METRE);
-        pidLeft.setOutputRange(-1, 1);*/
+        pidLeft.setOutputRange(-1, 1);
 
         //Start the compressor
         compressor.start();
@@ -137,17 +115,14 @@ public class RobotTemplate extends IterativeRobot {
 
     //Runs at the beginning of autonomous period
     public void autonomousInit() {
-
     }
 
     //Runs periodically during autonomous period
     public void autonomousPeriodic() {
-
     }
 
     //Runs continuously during autonomous period
     public void autonomousContinuous() {
-
     }
 
     //Runs at the beginning of teleoperated period
@@ -157,7 +132,7 @@ public class RobotTemplate extends IterativeRobot {
     //Runs periodically during teleoperated period
     public void teleopPeriodic() {
         System.out.println("renc: " + encRight.encoder.get() + " lenc: " + encLeft.encoder.get());
-        System.out.println("trans: " + transDirection.get() + " gripper: " + gripperDirection.get() + " elbow: " + elbowDirection.get());
+        System.out.println("trans: " + transToggle.get() + " gripper: " + gripperToggle.get() + " elbow: " + elbowToggle.get());
     }
 
     //Elevator state machine
@@ -176,64 +151,45 @@ public class RobotTemplate extends IterativeRobot {
         }
     }*/
 
-    //A function to provide toggling capabilities for buttons on controllers
-    public void toggle(BooleanHolder value, boolean buttonDown, BooleanHolder buttonReleased) {
-        //If the button is pressed and it was released
-        if(buttonDown && buttonReleased.get()) {
-            //It is no longer released
-            buttonReleased.set(false);
-
-            //Toggle the value
-            value.set(!value.get());
-        }
-        //If the button is released
-        else if(!buttonDown) {
-            //Set the button to released
-            buttonReleased.set(true);
-        }
-    }
-
     //Runs continuously during teleoperated period
     public void teleopContinuous() {
-        /*double setPoint = 0.0;
-
-        setPoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_GROUND) ? ElevatorState.ground : setPoint;
-        setPoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_FEED) ? ElevatorState.feed : setPoint;
-        setPoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_ONE) ? ElevatorState.posOne : setPoint;
-        setPoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_TWO) ? ElevatorState.posTwo : setPoint;
-        setPoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_THREE) ? ElevatorState.posThree : setPoint;
-        setPoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_FOUR) ? ElevatorState.posFour : setPoint;
-        setPoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_FIVE) ? ElevatorState.posFive : setPoint;
-        setPoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_SIX) ? ElevatorState.posSix : setPoint;
+        /*elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_GROUND) ? ElevatorSetpoint.ground : elevatorSetpoint;
+        elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_FEED) ? ElevatorSetpoint.feed : elevatorSetpoint;
+        elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_ONE) ? ElevatorSetpoint.posOne : elevatorSetpoint;
+        elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_TWO) ? ElevatorSetpoint.posTwo : elevatorSetpoint;
+        elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_THREE) ? ElevatorSetpoint.posThree : elevatorSetpoint;
+        elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_FOUR) ? ElevatorSetpoint.posFour : elevatorSetpoint;
+        elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_FIVE) ? ElevatorSetpoint.posFive : elevatorSetpoint;
+        elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_SIX) ? ElevatorSetpoint.posSix : elevatorSetpoint;
 
         elevatorStateMachine(setPoint);*/
 
         //Drive the elevator based on the y axis of the operator joystick
         vicElevator.set(stickOperator.getAxis(Joystick.AxisType.kY));
 
-        //Add a toggle on the transmission shifter button
-        toggle(transDirection, stickDriver.getRawButton(Driver.TRANS_TOGGLE), transReleased);
+        //Update the toggle on the transmission shifter button
+        transToggle.update(stickDriver.getRawButton(Driver.TRANS_TOGGLE));
         //Set the transmission shifter to open or closed based on the state of the toggle
-        transmissionShift.set(transDirection.get() ? Relay.Value.kForward : Relay.Value.kReverse);
+        transmissionShift.set(transToggle.get() ? Relay.Value.kForward : Relay.Value.kReverse);
 
         //Add a toggle on the gripper button
-        toggle(gripperDirection, stickOperator.getRawButton(Operator.GRIPPER_TOGGLE), gripperReleased);
+        gripperToggle.update(stickOperator.getRawButton(Operator.GRIPPER_TOGGLE));
         //Set the gripper to open or closed based on the state of the toggle
-        gripper.set(gripperDirection.get() ? Relay.Value.kForward : Relay.Value.kReverse);
+        gripper.set(gripperToggle.get() ? Relay.Value.kForward : Relay.Value.kReverse);
 
         //Add a toggle on the elbow button
-        toggle(elbowDirection, stickOperator.getRawButton(Operator.ELBOW_TOGGLE), elbowReleased);
+        elbowToggle.update(stickOperator.getRawButton(Operator.ELBOW_TOGGLE));
         //Set the elbow to open or closed based on the state of the toggle
-        elbow.set(elbowDirection.get() ? Relay.Value.kForward : Relay.Value.kReverse);
+        elbow.set(elbowToggle.get() ? Relay.Value.kForward : Relay.Value.kReverse);
 
         //Add a toggle on the arcade/tank drive button
-        toggle(arcadeDrive, stickDriver.getRawButton(Driver.ARCADE_TOGGLE), arcadeReleased);
+        arcadeToggle.update(stickDriver.getRawButton(Driver.ARCADE_TOGGLE));
         //Drive arcade or tank based on the state of the toggle
-        if(arcadeDrive.get()) {
+        if(arcadeToggle.get()) {
             //Move axis is 2 on stickDriver (first y-axis) and rotate axis is 3 on stickDriver (second x-axis)
             robotDrive.arcadeDrive(stickDriver, 2, stickDriver, 3);
         }
-        else {
+        else if (!arcadeToggle.get()) {
             //Left motors controlled by axis 2 on stickDriver (first y axis) and right motors controlled by axis 4 on stickDriver (second y-axis)
             robotDrive.tankDrive(stickDriver.getRawAxis(2), stickDriver.getRawAxis(4));
         }
