@@ -4,18 +4,20 @@ import edu.wpi.first.wpilibj.*;
 
 public class RobotTemplate extends IterativeRobot {
 
-    //Encoder counts per metre travelled by the robot
-    static final double COUNTS_PER_METRE = 900.0;
+    //Encoder counts per metre travelled by the robot in slow gear
+    static final double SLOW_COUNTS_PER_METRE = 750.0;
+    //Encoder counts per metre travelled by the robot in fast gear
+    static final double FAST_COUNTS_PER_METRE = 1800.0;
     //Speed to set the elevator motor to
     static final double ELEVATOR_SPEED = 0.5;
     //Max drive motor speed
     static final double MAX_SPEED = 1.0;
     //Number of elevator encoder counts
-    static final int MAX_ELEVATOR_COUNTS = 2000;
+    static final int MAX_ELEVATOR_COUNTS = 2800;
 
     //Driver joystick
     class Driver {
-        static final int TRANS_TOGGLE = 1;
+        static final int TRANS_TOGGLE = 8;//Right trigger
         static final int ARCADE_TOGGLE = 2;
     }
 
@@ -31,6 +33,7 @@ public class RobotTemplate extends IterativeRobot {
         static final int ELEVATOR_STATE_SIX = 8;
         static final int GRIPPER_TOGGLE = 3;
         static final int ELBOW_TOGGLE = 4;
+        static final int MANUAL_ELEVATOR_TOGGLE = 5;
     }
 
     //Joysticks
@@ -46,31 +49,31 @@ public class RobotTemplate extends IterativeRobot {
     Relay elbow = new Relay(4);
 
     //Jaguars
-    Jaguar jagLeftOne = new Jaguar(1);
-    Jaguar jagLeftTwo = new Jaguar(2);
-    Jaguar jagRightOne = new Jaguar(10);
-    Jaguar jagRightTwo = new Jaguar(4);
+    Jaguar jagLeft = new Jaguar(1);
+    Jaguar jagRight = new Jaguar(2);
+
+    //DI 3 doesn't work
 
     //Victors
-    Victor vicElevator = new Victor(5);
+    Victor vicElevator = new Victor(4);
 
     //Encoders
-    PIDEncoder encRight = new PIDEncoder(true, 1, 2, true);
     PIDEncoder encLeft = new PIDEncoder(true, 3, 4, true);
-
+    Encoder encNull = new Encoder(7, 8);
     PIDEncoder encElevator = new PIDEncoder(false, 5, 6);
+    PIDEncoder encRight = new PIDEncoder(true, 1, 2, true);
 
     //Provides drive functions (arcade and tank drive)
-    RobotDrive robotDrive = new RobotDrive(jagLeftOne, jagLeftTwo, jagRightOne, jagRightTwo);
+    RobotDrive robotDrive = new RobotDrive(jagLeft, jagRight);
 
     //PIDs
-    PIDController pidLeft = new PIDController(0.0, -0.00003, 0.0, encLeft, jagLeftOne, 0.005);
-    PIDController pidRight = new PIDController(0.0, 0.00003, 0.0, encRight, jagRightOne, 0.005);
-    PIDController pidElevator = new PIDController(0.0, 0.00003, 0.0, encElevator, vicElevator, 0.005);
+    PIDController pidLeft = new PIDController(0.0, 0.0001, 0.0, encLeft, jagLeft, 0.005);
+    PIDController pidRight = new PIDController(0.0, 0.0001, 0.0, encRight, jagRight, 0.005);
+    PIDController pidElevator = new PIDController(0.0, 0.0003, 0.0, encElevator, vicElevator, 0.005);
 
     //Toggle for the transmission shifter button
     //Default is open -- low gear
-    Toggle transToggle = new Toggle(true);
+    Toggle transToggle = new Toggle(false);
 
     //Toggle for the gripper button
     //Default is closed -- gripper is closed
@@ -84,20 +87,24 @@ public class RobotTemplate extends IterativeRobot {
     //Default is tank drive
     Toggle arcadeToggle = new Toggle(false);
 
+    //Toggle for manual elevator control
+    //Default is buttons
+    Toggle manualElevatorToggle = new Toggle(true);
+
     //Enumeration of setpoints for different heights of the elevator
     class ElevatorSetpoint {
-        static final int ground = 0;
-        static final int feed = 0;
-        static final int posOne = 0;
-        static final int posTwo = 0;
-        static final int posThree = 0;
-        static final int posFour = 0;
-        static final int posFive = 0;
-        static final int posSix = 0;
+        static final double ground = 0;
+        static final double feed = 0;
+        static final double posOne = MAX_ELEVATOR_COUNTS * 1.0 / 6.0;
+        static final double posTwo = MAX_ELEVATOR_COUNTS * 2.0 / 6.0;
+        static final double posThree = MAX_ELEVATOR_COUNTS * 3.0 / 6.0;
+        static final double posFour = MAX_ELEVATOR_COUNTS * 4.0 / 6.0;
+        static final double posFive = MAX_ELEVATOR_COUNTS * 5.0 / 6.0;
+        static final double posSix = MAX_ELEVATOR_COUNTS;
     }
 
     //The elevator setpoint, determined by which button on the operator joystick is pressed
-    int elevatorSetpoint = ElevatorSetpoint.ground;
+    double elevatorSetpoint = ElevatorSetpoint.ground;
 
     //Runs when the robot is turned
     public void robotInit() {
@@ -110,11 +117,11 @@ public class RobotTemplate extends IterativeRobot {
         encElevator.reset();
 
         //Input/output range for left encoder/motors
-        pidLeft.setInputRange(-COUNTS_PER_METRE, COUNTS_PER_METRE);
+        pidLeft.setInputRange(-SLOW_COUNTS_PER_METRE, SLOW_COUNTS_PER_METRE);
         pidLeft.setOutputRange(-MAX_SPEED, MAX_SPEED);
 
         //Input/output range for right encoder/motors
-        pidRight.setInputRange(-COUNTS_PER_METRE, COUNTS_PER_METRE);
+        pidRight.setInputRange(-SLOW_COUNTS_PER_METRE, SLOW_COUNTS_PER_METRE);
         pidRight.setOutputRange(-MAX_SPEED, MAX_SPEED);
 
         //Input/output range for elevator encoder/motor
@@ -148,11 +155,22 @@ public class RobotTemplate extends IterativeRobot {
     public void teleopInit() {
     }
 
+    //Used in teleopPeriodic to print only once a second
+    double lastPrintTime = 0;
+
     //Runs periodically during teleoperated period
     public void teleopPeriodic() {
-        System.out.println("renc: " + encRight.pidGet() + " lenc: " + encLeft.pidGet() + " elevator: " + encElevator.pidGet());
-        System.out.println("pidL: " + pidLeft.get() + " pidR: " + pidRight.get());
-        System.out.println("elevator setpoint: " + elevatorSetpoint);
+        final double curTime = Timer.getFPGATimestamp();
+        if(curTime - lastPrintTime > 0.5) {
+            System.out.println("renc: " + encRight.pidGet() + " lenc: " + encLeft.pidGet() + " elevator: " + encElevator.pidGet());
+            System.out.println("rSet: " + pidRight.getSetpoint() + " lSet: " + pidLeft.getSetpoint() + " eSet: " + pidElevator.getSetpoint());
+            System.out.println("rPID: " + pidRight.get() + "lPID: " + pidLeft.get() + " ePID: " + pidElevator.get());
+            System.out.println("elevatorPID: " + manualElevatorToggle.get());
+            System.out.println();
+            //System.out.println("pidL: " + pidLeft.get() + " pidR: " + pidRight.get());
+            //System.out.println("elevator setpoint: " + elevatorSetpoint);
+            lastPrintTime = curTime;
+        }
     }
 
     //Runs continuously during teleoperated period
@@ -173,15 +191,25 @@ public class RobotTemplate extends IterativeRobot {
         //Enable our PIDs
         pidLeft.enable();
         pidRight.enable();
-        pidElevator.enable();
+        
+        manualElevatorToggle.update(stickOperator.getRawButton(Operator.MANUAL_ELEVATOR_TOGGLE));
 
-        //Drive the elevator based on the y axis of the operator joystick
-        vicElevator.set(-stickOperator.getAxis(Joystick.AxisType.kY));
+        if(manualElevatorToggle.get()) {
+            pidElevator.enable();
+        } else {
+            pidElevator.disable();
+            //Drive the elevator based on the y axis of the operator joystick
+            vicElevator.set(-stickOperator.getAxis(Joystick.AxisType.kY));
+        }
 
         //Update the toggle on the transmission shifter button
         transToggle.update(stickDriver.getRawButton(Driver.TRANS_TOGGLE));
         //Set the transmission shifter to open or closed based on the state of the toggle
         transmissionShift.set(transToggle.get() ? Relay.Value.kForward : Relay.Value.kReverse);
+        
+        double countsPerMetre = transToggle.get() ? FAST_COUNTS_PER_METRE : SLOW_COUNTS_PER_METRE;
+        pidLeft.setInputRange(-countsPerMetre, countsPerMetre);
+        pidRight.setInputRange(-countsPerMetre, countsPerMetre);
 
         //Add a toggle on the gripper button
         gripperToggle.update(stickOperator.getRawButton(Operator.GRIPPER_TOGGLE));
@@ -201,10 +229,19 @@ public class RobotTemplate extends IterativeRobot {
             robotDrive.arcadeDrive(stickDriver, 2, stickDriver, 3);
         }
         else if (!arcadeToggle.get()) {
+            //Left axis
+            double leftAxis = stickDriver.getRawAxis(2);
+            //0.1 dead zone
+            leftAxis = Math.abs(leftAxis) < 0.1 ? 0.0 : leftAxis;
+
+            //Right axis
+            double rightAxis = stickDriver.getRawAxis(4);
+            //0.1 dead zone
+            rightAxis = Math.abs(rightAxis) < 0.1 ? 0.0 : rightAxis;
+            
             //Left motors controlled by axis 2 on stickDriver (first y axis) and right motors controlled by axis 4 on stickDriver (second y-axis)
-            //robotDrive.tankDrive(stickDriver.getRawAxis(2), stickDriver.getRawAxis(4));
-            pidLeft.setSetpoint(stickDriver.getRawAxis(2));
-            pidRight.setSetpoint(stickDriver.getRawAxis(4));
+            pidLeft.setSetpoint(leftAxis * countsPerMetre);
+            pidRight.setSetpoint(-rightAxis * countsPerMetre);
         }
     }
 }
