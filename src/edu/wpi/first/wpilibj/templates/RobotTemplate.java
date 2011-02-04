@@ -8,11 +8,11 @@ public class RobotTemplate extends IterativeRobot {
     //Encoder rate at max speed in fast gear
     static final double FAST_MAX_ENCODER_RATE = 1700.0;
     //Speed to set the elevator motor to
-    static final double ELEVATOR_SPEED = 0.4;
+    static final double ELEVATOR_SPEED = 0.8;
     //Max drive motor speed
     static final double MAX_SPEED = 1.0;
     //Starting encoder counts
-    static final double ELEVATOR_BASE = 900;
+    static final double ELEVATOR_BASE = 0;
     //Number of elevator encoder counts
     static final int MAX_ELEVATOR_COUNTS = 2800;
 
@@ -33,16 +33,17 @@ public class RobotTemplate extends IterativeRobot {
     class Operator {
         //Buttons
         static final int ELEVATOR_STATE_GROUND = 1;
-        static final int ELEVATOR_STATE_FEED = 2;
         static final int ELEVATOR_STATE_ONE = 11;
         static final int ELEVATOR_STATE_TWO = 12;
         static final int ELEVATOR_STATE_THREE = 9;
         static final int ELEVATOR_STATE_FOUR = 10;
         static final int ELEVATOR_STATE_FIVE = 7;
         static final int ELEVATOR_STATE_SIX = 8;
+        static final int ELEVATOR_STATE_FEED = 2;
+        static final int ELEVATOR_MANUAL_TOGGLE = 5;
+        static final int ELEVATOR_REZERO = 6;
         static final int GRIPPER_TOGGLE = 3;
         static final int ELBOW_TOGGLE = 4;
-        static final int MANUAL_ELEVATOR_TOGGLE = 5;
     }
 
     //Joysticks
@@ -78,23 +79,22 @@ public class RobotTemplate extends IterativeRobot {
     //PIDs
     PIDController pidLeft = new PIDController(0.0, 0.0005, 0.0, encLeft, jagLeft, 0.005);
     PIDController pidRight = new PIDController(0.0, 0.0005, 0.0, encRight, jagRight, 0.005);
-    PIDController pidElevator = new PIDController(0.0, 0.0005, 0.0, encElevator, vicElevator, 1);
 
-    //Toggle for manual elevator control
-    //Default is buttons
-    Toggle manualElevatorToggle = new Toggle(true);
+    //Toggle for manual or automated elevator control
+    //Default -- automated
+    Toggle manualElevatorToggle = new Toggle(false);
 
     //Toggle for the transmission shifter button
-    //Default is open -- low gear
+    //Default -- low gear
     Toggle transToggle = new Toggle(false);
 
     //Toggle for the gripper button
-    //Default is closed -- gripper is closed
-    Toggle gripperToggle = new Toggle(false);
+    //Default -- gripper is closed
+    Toggle gripperToggle = new Toggle(true);
 
     //Toggle for the elbow button
-    //Default is closed -- elbow is up
-    Toggle elbowToggle = new Toggle(false);
+    //Default -- elbow is up
+    Toggle elbowToggle = new Toggle(true);
 
     //Toggle for arcade/tank drive
     //Default is tank drive
@@ -117,7 +117,7 @@ public class RobotTemplate extends IterativeRobot {
 
     //Runs when the robot is turned
     public void robotInit() {
-        //Start both of the drive encoders
+        //Start our encoders
         encRight.start();
         encLeft.start();
         encElevator.start();
@@ -133,19 +133,15 @@ public class RobotTemplate extends IterativeRobot {
         pidRight.setInputRange(-SLOW_MAX_ENCODER_RATE, SLOW_MAX_ENCODER_RATE);
         pidRight.setOutputRange(-MAX_SPEED, MAX_SPEED);
 
-        //Input/output range for elevator encoder/motor
-        pidElevator.setInputRange(0, MAX_ELEVATOR_COUNTS);
-        pidElevator.setOutputRange(-ELEVATOR_SPEED, ELEVATOR_SPEED);
-
         //Start the compressor
         compressor.start();
     }
 
     //Runs at the beginning of disabled period
     public void disabledInit() {
+        //Disable PIDs
         pidLeft.disable();
         pidRight.disable();
-        pidElevator.disable();
     }
 
     //Runs at the beginning of autonomous period
@@ -175,10 +171,10 @@ public class RobotTemplate extends IterativeRobot {
         if(curPrintTime - lastPrintTime > 0.5) {
             //Print statements
             System.out.println("renc: " + encRight.pidGet() + " lenc: " + encLeft.pidGet() + " elevator: " + encElevator.pidGet());
-            System.out.println("rSet: " + pidRight.getSetpoint() + " lSet: " + pidLeft.getSetpoint() + " eSet: " + pidElevator.getSetpoint());
-            System.out.println("rPID: " + pidRight.get() + " lPID: " + pidLeft.get() + " ePID: " + pidElevator.get());
-            System.out.println("elevatorPID: " + manualElevatorToggle.get());
-            System.out.println("elevAxis: " + stickOperator.getAxis(Joystick.AxisType.kY) + "leftAxis: " + stickDriver.getRawAxis(Driver.Y_AXIS_LEFT) + " rightAxis: " + stickDriver.getRawAxis(Driver.Y_AXIS_RIGHT));
+            System.out.println("rSet: " + pidRight.getSetpoint() + " lSet: " + pidLeft.getSetpoint() + " eSet: " + elevatorSetpoint);
+            System.out.println("rPID: " + pidRight.get() + " lPID: " + pidLeft.get());
+            System.out.println("manualElevator: " + manualElevatorToggle.get());
+            System.out.println("elevAxis: " + stickOperator.getAxis(Joystick.AxisType.kY) + " leftAxis: " + stickDriver.getRawAxis(Driver.Y_AXIS_LEFT) + " rightAxis: " + stickDriver.getRawAxis(Driver.Y_AXIS_RIGHT));
             System.out.println();
 
             //Update the last print time
@@ -198,20 +194,40 @@ public class RobotTemplate extends IterativeRobot {
         elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_SIX) ? ElevatorSetpoint.posSix : elevatorSetpoint;
         elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_FEED) ? ElevatorSetpoint.feed : elevatorSetpoint;
 
-        //Actually set our setpoint
-        pidElevator.setSetpoint(elevatorSetpoint);
-
-        //Update the toggle on the manual/PID elevator control
-        manualElevatorToggle.update(stickOperator.getRawButton(Operator.MANUAL_ELEVATOR_TOGGLE));
-        //Manual or PID elevator control
+        //Update the toggle on the manual/automated elevator control
+        manualElevatorToggle.update(stickOperator.getRawButton(Operator.ELEVATOR_MANUAL_TOGGLE));
+        //Manual or automated elevator control
         if(manualElevatorToggle.get()) {
-            //Disable PID on the elevator
-            pidElevator.disable();
             //Drive the elevator based on the y axis of the operator joystick
             vicElevator.set(-stickOperator.getAxis(Joystick.AxisType.kY));
         } else {
-            //Enable PID on the elevator
-            pidElevator.enable();
+            //Difference between setpoint and our position
+            final double error = elevatorSetpoint - encElevator.pidGet();
+
+            //We can be off by 5% going up, 1% going down
+            final double toleranceWhileGoingUp = MAX_ELEVATOR_COUNTS * 0.05;
+            final double toleranceWhileGoingDown = -MAX_ELEVATOR_COUNTS * 0.01;
+
+            //Different speeds going up/down
+            final double speedWhileGoingUp = 1.0;
+            final double speedWhileGoingDown = -0.8;
+
+            //Go up when below setpoint, error is more than the tolerance
+            if(error > 0 && error > toleranceWhileGoingUp) {
+                vicElevator.set(speedWhileGoingUp);
+            //Go down when above setpoint, error is more than the tolerance
+            } else if(error < 0 && error < toleranceWhileGoingDown) {
+                vicElevator.set(speedWhileGoingDown);
+            //We have reached our setpoint
+            } else {
+                //Turn off
+                vicElevator.set(0.0);
+            }
+        }
+
+        //Re-zero the elevator encoder is re-zero button is pressed
+        if(stickOperator.getRawButton(Operator.ELEVATOR_REZERO)) {
+            encElevator.reset();
         }
 
         //Update the toggle on the transmission shifter button
@@ -219,7 +235,7 @@ public class RobotTemplate extends IterativeRobot {
         //Set the transmission shifter to open or closed based on the state of the toggle
         transmissionShift.set(transToggle.get() ? Relay.Value.kForward : Relay.Value.kReverse);
 
-        //Determine which max encoder rate to use depending on the transmission state
+        //Determine the input range to use (max encoder rate) to use depending on the transmission state we are in
         double maxEncoderRate = transToggle.get() ? FAST_MAX_ENCODER_RATE : SLOW_MAX_ENCODER_RATE;
         pidLeft.setInputRange(-maxEncoderRate, maxEncoderRate);
         pidRight.setInputRange(-maxEncoderRate, maxEncoderRate);
@@ -238,17 +254,25 @@ public class RobotTemplate extends IterativeRobot {
         arcadeToggle.update(stickDriver.getRawButton(Driver.ARCADE_TOGGLE));
         //Drive arcade or tank based on the state of the toggle
         if(arcadeToggle.get()) {
-            //Disable PID
-            pidLeft.disable();
-            pidRight.disable();
+            //If PID is enabled
+            if(pidLeft.isEnable() || pidRight.isEnable())
+            {
+                //Disable PID
+                pidLeft.disable();
+                pidRight.disable();
+            }
 
             //Move axis is first y-axis and rotate axis is second x-axis
             robotDrive.arcadeDrive(stickDriver, Driver.Y_AXIS_LEFT, stickDriver, Driver.X_AXIS_RIGHT);
         }
         else if (!arcadeToggle.get()) {
-            //Enable PID
-            pidLeft.enable();
-            pidRight.enable();
+            //If PID is disabled
+            if(!pidLeft.isEnable() || !pidRight.isEnable())
+            {
+                //Enable PID
+                pidLeft.enable();
+                pidRight.enable();
+            }
 
             //Left axis
             double leftAxis = stickDriver.getRawAxis(Driver.Y_AXIS_LEFT);
