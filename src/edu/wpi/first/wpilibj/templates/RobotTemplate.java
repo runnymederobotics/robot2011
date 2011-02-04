@@ -90,7 +90,7 @@ public class RobotTemplate extends IterativeRobot {
 
     //Toggle for the gripper button
     //Default -- gripper is closed
-    Toggle gripperToggle = new Toggle(true);
+    Toggle gripperToggle = new Toggle(false);
 
     //Toggle for the elbow button
     //Default -- elbow is up
@@ -206,11 +206,11 @@ public class RobotTemplate extends IterativeRobot {
 
             //We can be off by 5% going up, 1% going down
             final double toleranceWhileGoingUp = MAX_ELEVATOR_COUNTS * 0.05;
-            final double toleranceWhileGoingDown = -MAX_ELEVATOR_COUNTS * 0.01;
+            final double toleranceWhileGoingDown = -MAX_ELEVATOR_COUNTS * 0.05;
 
             //Different speeds going up/down
             final double speedWhileGoingUp = 1.0;
-            final double speedWhileGoingDown = -0.8;
+            final double speedWhileGoingDown = -0.7;
 
             //Go up when below setpoint, error is more than the tolerance
             if(error > 0 && error > toleranceWhileGoingUp) {
