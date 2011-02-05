@@ -2,7 +2,7 @@ package edu.wpi.first.wpilibj.templates;
 
 import edu.wpi.first.wpilibj.*;
 
-public class Robot extends IterativeRobot {
+public class RobotTemplate extends IterativeRobot {
     //Encoder rate at max speed in slow gear
     static final double SLOW_MAX_ENCODER_RATE = 750.0;
     //Encoder rate at max speed in fast gear
@@ -10,7 +10,9 @@ public class Robot extends IterativeRobot {
     //Speed to set the elevator motor to
     static final double ELEVATOR_SPEED = 0.8;
     //Max drive motor speed
-    static final double MAX_SPEED = 1.0;
+    static final double MAX_DRIVE_SPEED = 1.0;
+    //Encoder counts per metre travelled
+    static final double COUNTS_PER_METRE = 500;
     //Starting encoder counts
     static final double ELEVATOR_BASE = 0;
     //Number of elevator encoder counts
@@ -44,6 +46,8 @@ public class Robot extends IterativeRobot {
         static final int ELEVATOR_REZERO = 6;
         static final int GRIPPER_TOGGLE = 3;
         static final int ELBOW_TOGGLE = 4;
+        static final int MINIBOT_RELEASE_ONE = 5;
+        static final int MINIBOT_RELEASE_TWO = 6;
     }
 
     //Driver station
@@ -60,6 +64,26 @@ public class Robot extends IterativeRobot {
     Relay transmissionShift = new Relay(2);
     Relay gripper = new Relay(3);
     Relay elbow = new Relay(4);
+    Relay minibotVertical = new Relay(5);
+    Relay minibotHorizontal = new Relay(6);
+
+    class PIDOutputStorage implements PIDOutput {
+
+        public void pidWrite(double output) {
+            value = output;
+        }
+
+        public double get() {
+            return value;
+        }
+
+        double value = 0;
+    };
+
+    //Gyro
+    Gyro gyro = new Gyro(1);
+    PIDOutputStorage gyroOutput = new PIDOutputStorage();
+    PIDController pidGyro = new PIDController(0.0, 0.0005, 0.0, gyro, gyroOutput, 0.005);
 
     //Jaguars
     Jaguar jagLeft = new Jaguar(1);
@@ -130,11 +154,15 @@ public class Robot extends IterativeRobot {
 
         //Input/output range for left encoder/motors
         pidLeft.setInputRange(-SLOW_MAX_ENCODER_RATE, SLOW_MAX_ENCODER_RATE);
-        pidLeft.setOutputRange(-MAX_SPEED, MAX_SPEED);
+        pidLeft.setOutputRange(-MAX_DRIVE_SPEED, MAX_DRIVE_SPEED);
 
         //Input/output range for right encoder/motors
         pidRight.setInputRange(-SLOW_MAX_ENCODER_RATE, SLOW_MAX_ENCODER_RATE);
-        pidRight.setOutputRange(-MAX_SPEED, MAX_SPEED);
+        pidRight.setOutputRange(-MAX_DRIVE_SPEED, MAX_DRIVE_SPEED);
+
+        //Input/output range for the gyro PID
+        pidGyro.setInputRange(-360.0, 360.0);
+        pidGyro.setOutputRange(-1.0, 1.0);
 
         //Start the compressor
         compressor.start();
@@ -157,6 +185,7 @@ public class Robot extends IterativeRobot {
             System.out.println("rPID: " + pidRight.get() + " lPID: " + pidLeft.get());
             System.out.println("manualElevator: " + manualElevatorToggle.get());
             System.out.println("elevAxis: " + stickOperator.getAxis(Joystick.AxisType.kY) + " leftAxis: " + stickDriver.getRawAxis(Driver.Y_AXIS_LEFT) + " rightAxis: " + stickDriver.getRawAxis(Driver.Y_AXIS_RIGHT));
+            System.out.println("Gyro PIDget: " + gyro.pidGet() +  " gyro output storage: " + gyroOutput.get());
             System.out.println();
 
             //Update the last print time
@@ -179,25 +208,104 @@ public class Robot extends IterativeRobot {
 
     //Runs continuously during disabled period
     public void disabledContinuous() {
-
     }
 
     //Runs at the beginning of autonomous period
     public void autonomousInit() {
+        //Minibot defaults to up
+        minibotVertical.set(Relay.Value.kReverse);
+        minibotHorizontal.set(Relay.Value.kReverse);
+
+        //Default to slow driving mode
+        transmissionShift.set(Relay.Value.kReverse);
+
+        gyro.reset();
+        pidGyro.enable();
     }
 
     //Runs periodically during autonomous period
     public void autonomousPeriodic() {
-        //Call our print function with the current mode
-        print("Autonomous");
     }
+
+    //Enumeration of autonomous modes
+    class AutonomousState {
+        static final int Driving = 0;
+        static final int Turning = 1;
+        static final int Hanging = 2;
+        static final int Done = 3;
+    }
+
+    class Step {
+        public int type = AutonomousState.Done;
+
+        public double value = 0.0;
+    }
+
+    Step stepList[] = null;
+    int stepIndex = 0;
 
     //Runs continuously during autonomous period
     public void autonomousContinuous() {
+        Step currentStep = stepList[stepIndex];
+        int lastStepIndex = stepIndex;
+        if(currentStep != null) {
+            switch(currentStep.type) {
+                case AutonomousState.Driving:
+                    final boolean leftDone = encLeft.encoder.get() * COUNTS_PER_METRE >= currentStep.value;
+                    final boolean rightDone = encRight.encoder.get() * COUNTS_PER_METRE >= currentStep.value;
+                    if(!leftDone)
+                        pidLeft.setSetpoint(0.3 * SLOW_MAX_ENCODER_RATE);
+                    if(!rightDone)
+                        pidRight.setSetpoint(0.3 * SLOW_MAX_ENCODER_RATE);
+                    if(leftDone && rightDone) {
+                        ++stepIndex;
+                    }
+                    break;
+                case AutonomousState.Turning:
+                    pidGyro.setSetpoint(currentStep.value);
+                    pidLeft.setSetpoint(gyroOutput.get() * SLOW_MAX_ENCODER_RATE);
+                    pidRight.setSetpoint(-gyroOutput.get() * SLOW_MAX_ENCODER_RATE);
+                    if(pidGyro.onTarget()) {
+                        ++stepIndex;
+                    }
+                    break;
+                case AutonomousState.Hanging:
+                    break;
+                case AutonomousState.Done:
+                    break;
+            }
+        }
+        if(lastStepIndex != stepIndex) {
+            encLeft.reset();
+            encRight.reset();
+            gyro.reset();
+            pidLeft.setSetpoint(0.0);
+            pidRight.setSetpoint(0.0);
+        }
     }
+
+    //Start time for teleoperated mode
+    double teleopStartTime;
+    //Start time for when the minibot release is triggered
+    double minibotReleaseTime;
+    //Releasing minibot
+    boolean releaseMinibot;
+
+    //number of seconds to wait before the minibot is allowed to be deployed
+    static final double MIN_MINIBOT_RELEASE_TIME = 110.0;
+    //number of seconds after the minibot drops before we send it out horizontal
+    static final double MINIBOT_HORIZONTAL_DELAY = 2.0;
 
     //Runs at the beginning of teleoperated period
     public void teleopInit() {
+        //Initialize variables
+        teleopStartTime = Timer.getFPGATimestamp();
+        minibotReleaseTime = 0.0;
+        releaseMinibot = false;
+
+        //Minibot defaults to up
+        minibotVertical.set(Relay.Value.kReverse);
+        minibotHorizontal.set(Relay.Value.kReverse);
     }
 
     //Runs periodically during teleoperated period
@@ -279,8 +387,7 @@ public class Robot extends IterativeRobot {
         //Drive arcade or tank based on the state of the toggle
         if(arcadeToggle.get()) {
             //If PID is enabled
-            if(pidLeft.isEnable() || pidRight.isEnable())
-            {
+            if(pidLeft.isEnable() || pidRight.isEnable()) {
                 //Disable PID
                 pidLeft.disable();
                 pidRight.disable();
@@ -291,8 +398,7 @@ public class Robot extends IterativeRobot {
         }
         else if (!arcadeToggle.get()) {
             //If PID is disabled
-            if(!pidLeft.isEnable() || !pidRight.isEnable())
-            {
+            if(!pidLeft.isEnable() || !pidRight.isEnable()) {
                 //Enable PID
                 pidLeft.enable();
                 pidRight.enable();
@@ -311,6 +417,26 @@ public class Robot extends IterativeRobot {
             //Set the setpoint as a percentage of the maximum encoder rate
             pidLeft.setSetpoint(leftAxis * maxEncoderRate);
             pidRight.setSetpoint(-rightAxis * maxEncoderRate);
+        }
+
+        //If there are 10 seconds left
+        if(Timer.getFPGATimestamp() - teleopStartTime >= MIN_MINIBOT_RELEASE_TIME) {
+            //If we triggered the release, set the release true, otherwise just leave it
+            //Creates a one-way toggle
+            releaseMinibot = stickOperator.getRawButton(Operator.MINIBOT_RELEASE_ONE) && stickOperator.getRawButton(Operator.MINIBOT_RELEASE_TWO) ? true : releaseMinibot;
+            //If we want to release
+            if(releaseMinibot) {
+                //Set the vertical relay to released
+                minibotVertical.set(Relay.Value.kForward);
+                //If the release time is 0 (we haven't set the release time yet) then set the release time
+                //Allows us to set the release time only once
+                minibotReleaseTime = minibotReleaseTime == 0.0 ? Timer.getFPGATimestamp() : minibotReleaseTime;
+                //If it's been at least 2 seconds since the release was triggered
+                if(Timer.getFPGATimestamp() - minibotReleaseTime >= MINIBOT_HORIZONTAL_DELAY) {
+                    //Set the horizontal relay to released
+                    minibotHorizontal.set(Relay.Value.kForward);
+                }
+            }
         }
     }
 }
