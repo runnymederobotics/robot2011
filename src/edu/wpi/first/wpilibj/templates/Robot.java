@@ -2,7 +2,7 @@ package edu.wpi.first.wpilibj.templates;
 
 import edu.wpi.first.wpilibj.*;
 
-public class RobotTemplate extends IterativeRobot {
+public class Robot extends IterativeRobot {
     //Encoder rate at max speed in slow gear
     static final double SLOW_MAX_ENCODER_RATE = 750.0;
     //Encoder rate at max speed in fast gear
