@@ -46,6 +46,9 @@ public class RobotTemplate extends IterativeRobot {
         static final int ELBOW_TOGGLE = 4;
     }
 
+    //Driver station
+    DriverStation ds = DriverStation.getInstance();
+
     //Joysticks
     Joystick stickDriver = new Joystick(1);
     Joystick stickOperator = new Joystick(2);
@@ -136,40 +139,19 @@ public class RobotTemplate extends IterativeRobot {
         //Start the compressor
         compressor.start();
     }
-
-    //Runs at the beginning of disabled period
-    public void disabledInit() {
-        //Disable PIDs
-        pidLeft.disable();
-        pidRight.disable();
-    }
-
-    //Runs at the beginning of autonomous period
-    public void autonomousInit() {
-    }
-
-    //Runs periodically during autonomous period
-    public void autonomousPeriodic() {
-    }
-
-    //Runs continuously during autonomous period
-    public void autonomousContinuous() {
-    }
-
-    //Runs at the beginning of teleoperated period
-    public void teleopInit() {
-    }
-
+    
     //Used in teleopPeriodic to print only once a second
     double lastPrintTime = 0;
 
-    //Runs periodically during teleoperated period
-    public void teleopPeriodic() {
+    //Print function for our variables
+    public void print(String mode) {
         //Current time
         final double curPrintTime = Timer.getFPGATimestamp();
         //If it has been more than half a second
         if(curPrintTime - lastPrintTime > 0.5) {
             //Print statements
+            System.out.println("[" + mode + "]");
+            System.out.println("DS DI 1: " + ds.getDigitalIn(1));
             System.out.println("renc: " + encRight.pidGet() + " lenc: " + encLeft.pidGet() + " elevator: " + encElevator.pidGet());
             System.out.println("rSet: " + pidRight.getSetpoint() + " lSet: " + pidLeft.getSetpoint() + " eSet: " + elevatorSetpoint);
             System.out.println("rPID: " + pidRight.get() + " lPID: " + pidLeft.get());
@@ -180,6 +162,48 @@ public class RobotTemplate extends IterativeRobot {
             //Update the last print time
             lastPrintTime = curPrintTime;
         }
+    }
+
+    //Runs at the beginning of disabled period
+    public void disabledInit() {
+        //Disable PIDs
+        pidLeft.disable();
+        pidRight.disable();
+    }
+    
+    //Runs periodically during disabled period
+    public void disabledPeriodic() {
+        //Call our print function with the current mode
+        print("Disabled");
+    }
+
+    //Runs continuously during disabled period
+    public void disabledContinuous() {
+
+    }
+
+    //Runs at the beginning of autonomous period
+    public void autonomousInit() {
+    }
+
+    //Runs periodically during autonomous period
+    public void autonomousPeriodic() {
+        //Call our print function with the current mode
+        print("Autonomous");
+    }
+
+    //Runs continuously during autonomous period
+    public void autonomousContinuous() {
+    }
+
+    //Runs at the beginning of teleoperated period
+    public void teleopInit() {
+    }
+
+    //Runs periodically during teleoperated period
+    public void teleopPeriodic() {
+        //Call our print function with the current mode
+        print("Teleoperated");
     }
 
     //Runs continuously during teleoperated period
