@@ -13,7 +13,7 @@ public class Toggle {
     }
 
     //Update value
-    public void update(boolean button) {
+    public void feed(boolean button) {
         //If the button is pressed and it wasnt last time
         if(button && !lastButtonState) {
             //Do the toggle

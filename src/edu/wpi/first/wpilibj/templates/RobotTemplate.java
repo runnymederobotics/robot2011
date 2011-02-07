@@ -17,6 +17,10 @@ public class RobotTemplate extends IterativeRobot {
     static final double ELEVATOR_BASE = 0;
     //Number of elevator encoder counts
     static final int MAX_ELEVATOR_COUNTS = 2800;
+    //Number of seconds to wait in teleoperated mode before the minibot is allowed to be deployed
+    static final double MINIBOT_RELEASE_TIME = 110.0;
+    //Number of seconds after the minibot drops before we send it out horizontal
+    static final double MINIBOT_HORIZONTAL_DELAY = 2.0;
 
     //Driver joystick
     class Driver {
@@ -67,16 +71,19 @@ public class RobotTemplate extends IterativeRobot {
     Relay minibotVertical = new Relay(5);
     Relay minibotHorizontal = new Relay(6);
 
+    //A storage class to hold the output of a PIDController
     class PIDOutputStorage implements PIDOutput {
-
+        //pidWrite override
         public void pidWrite(double output) {
             value = output;
         }
 
+        //Get the value
         public double get() {
             return value;
         }
 
+        //The output of the PID
         double value = 0;
     };
 
@@ -235,50 +242,79 @@ public class RobotTemplate extends IterativeRobot {
         static final int Done = 3;
     }
 
+    //Class that defines the current step in autonomous mode
     class Step {
+        //The type of step
         public int type = AutonomousState.Done;
 
-        public double value = 0.0;
+        //Get the value
+        public double get() {
+            return value;
+        }
+
+        //The amount we want to move by in the step (units depend on the type of step)
+        double value = 0.0;
     }
 
+    //Array to hold steps -- changed depending on which autonomous mode we want
     Step stepList[] = null;
+    //Iterates through each step
     int stepIndex = 0;
 
     //Runs continuously during autonomous period
     public void autonomousContinuous() {
+        //Our current step in our list of steps
         Step currentStep = stepList[stepIndex];
+        //The last step we did
         int lastStepIndex = stepIndex;
+        //If we have a step to do
         if(currentStep != null) {
+            //Switch the type of step
             switch(currentStep.type) {
+                //If we want to drive forward
                 case AutonomousState.Driving:
-                    final boolean leftDone = encLeft.encoder.get() * COUNTS_PER_METRE >= currentStep.value;
-                    final boolean rightDone = encRight.encoder.get() * COUNTS_PER_METRE >= currentStep.value;
+                    //If we have reached our value for this step on the left or right side
+                    final boolean leftDone = encLeft.encoder.get() * COUNTS_PER_METRE >= currentStep.get();
+                    final boolean rightDone = encRight.encoder.get() * COUNTS_PER_METRE >= currentStep.get();
+                    //Drive each side until we reach the value for each side
                     if(!leftDone)
                         pidLeft.setSetpoint(0.3 * SLOW_MAX_ENCODER_RATE);
                     if(!rightDone)
                         pidRight.setSetpoint(0.3 * SLOW_MAX_ENCODER_RATE);
+                    //If the value is reached
                     if(leftDone && rightDone) {
+                        //Go to the next step
                         ++stepIndex;
                     }
                     break;
+                //If we want to turn
                 case AutonomousState.Turning:
-                    pidGyro.setSetpoint(currentStep.value);
+                    //Set the setpoint for the gyro PID to the
+                    pidGyro.setSetpoint(currentStep.get());
+                    //Drive the motors with the output from the gyro PID
                     pidLeft.setSetpoint(gyroOutput.get() * SLOW_MAX_ENCODER_RATE);
                     pidRight.setSetpoint(-gyroOutput.get() * SLOW_MAX_ENCODER_RATE);
+                    //If the target angle is reached
                     if(pidGyro.onTarget()) {
+                        //Move to the next step
                         ++stepIndex;
                     }
                     break;
+                //If we want to use the elevator
                 case AutonomousState.Hanging:
                     break;
+                //If we are done our autonomous mode
                 case AutonomousState.Done:
                     break;
             }
         }
+        //If we want to go to the next step
         if(lastStepIndex != stepIndex) {
+            //Reset everything
             encLeft.reset();
             encRight.reset();
             gyro.reset();
+            //Stop
             pidLeft.setSetpoint(0.0);
             pidRight.setSetpoint(0.0);
         }
@@ -290,11 +326,6 @@ public class RobotTemplate extends IterativeRobot {
     double minibotReleaseTime;
     //Releasing minibot
     boolean releaseMinibot;
-
-    //number of seconds to wait before the minibot is allowed to be deployed
-    static final double MIN_MINIBOT_RELEASE_TIME = 110.0;
-    //number of seconds after the minibot drops before we send it out horizontal
-    static final double MINIBOT_HORIZONTAL_DELAY = 2.0;
 
     //Runs at the beginning of teleoperated period
     public void teleopInit() {
@@ -326,8 +357,8 @@ public class RobotTemplate extends IterativeRobot {
         elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_SIX) ? ElevatorSetpoint.posSix : elevatorSetpoint;
         elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_FEED) ? ElevatorSetpoint.feed : elevatorSetpoint;
 
-        //Update the toggle on the manual/automated elevator control
-        manualElevatorToggle.update(stickOperator.getRawButton(Operator.ELEVATOR_MANUAL_TOGGLE));
+        //Feed the toggle on the manual/automated elevator control
+        manualElevatorToggle.feed(stickOperator.getRawButton(Operator.ELEVATOR_MANUAL_TOGGLE));
         //Manual or automated elevator control
         if(manualElevatorToggle.get()) {
             //Drive the elevator based on the y axis of the operator joystick
@@ -362,8 +393,8 @@ public class RobotTemplate extends IterativeRobot {
             encElevator.reset();
         }
 
-        //Update the toggle on the transmission shifter button
-        transToggle.update(stickDriver.getRawButton(Driver.TRANS_TOGGLE));
+        //Feed the toggle on the transmission shifter button
+        transToggle.feed(stickDriver.getRawButton(Driver.TRANS_TOGGLE));
         //Set the transmission shifter to open or closed based on the state of the toggle
         transmissionShift.set(transToggle.get() ? Relay.Value.kForward : Relay.Value.kReverse);
 
@@ -372,18 +403,18 @@ public class RobotTemplate extends IterativeRobot {
         pidLeft.setInputRange(-maxEncoderRate, maxEncoderRate);
         pidRight.setInputRange(-maxEncoderRate, maxEncoderRate);
 
-        //Add a toggle on the gripper button
-        gripperToggle.update(stickOperator.getRawButton(Operator.GRIPPER_TOGGLE));
+        //Feed the toggle on the gripper button
+        gripperToggle.feed(stickOperator.getRawButton(Operator.GRIPPER_TOGGLE));
         //Set the gripper to open or closed based on the state of the toggle
         gripper.set(gripperToggle.get() ? Relay.Value.kForward : Relay.Value.kReverse);
 
-        //Add a toggle on the elbow button
-        elbowToggle.update(stickOperator.getRawButton(Operator.ELBOW_TOGGLE));
+        //Feed the toggle on the elbow button
+        elbowToggle.feed(stickOperator.getRawButton(Operator.ELBOW_TOGGLE));
         //Set the elbow to open or closed based on the state of the toggle
         elbow.set(elbowToggle.get() ? Relay.Value.kForward : Relay.Value.kReverse);
 
-        //Add a toggle on the arcade/tank drive button
-        arcadeToggle.update(stickDriver.getRawButton(Driver.ARCADE_TOGGLE));
+        //Feed the toggle on the arcade/tank drive button
+        arcadeToggle.feed(stickDriver.getRawButton(Driver.ARCADE_TOGGLE));
         //Drive arcade or tank based on the state of the toggle
         if(arcadeToggle.get()) {
             //If PID is enabled
@@ -420,8 +451,8 @@ public class RobotTemplate extends IterativeRobot {
         }
 
         //If there are 10 seconds left
-        if(Timer.getFPGATimestamp() - teleopStartTime >= MIN_MINIBOT_RELEASE_TIME) {
-            //If we triggered the release, set the release true, otherwise just leave it
+        if(Timer.getFPGATimestamp() - teleopStartTime >= MINIBOT_RELEASE_TIME) {
+            //If we triggered the release, set the release to true, otherwise just leave it
             //Creates a one-way toggle
             releaseMinibot = stickOperator.getRawButton(Operator.MINIBOT_RELEASE_ONE) && stickOperator.getRawButton(Operator.MINIBOT_RELEASE_TWO) ? true : releaseMinibot;
             //If we want to release
