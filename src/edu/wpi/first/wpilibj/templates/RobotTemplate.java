@@ -87,6 +87,32 @@ public class RobotTemplate extends IterativeRobot {
         double value = 0;
     };
 
+    //A storage class to hold the output of a PIDController
+    class OutputStorage {
+        public void disable() {
+        }
+
+        public void set(double val) {
+            value = val;
+        }
+
+        public void set(double val, byte i) {
+            value = val;
+        }
+
+        public void pidWrite() {
+
+        }
+
+        //Get the value
+        public double get() {
+            return value;
+        }
+
+        //The output of the PID
+        double value = 0;
+    };
+
     //Gyro
     Gyro gyro = new Gyro(1);
     PIDOutputStorage gyroOutput = new PIDOutputStorage();
@@ -95,6 +121,10 @@ public class RobotTemplate extends IterativeRobot {
     //Jaguars
     Jaguar jagLeft = new Jaguar(1);
     Jaguar jagRight = new Jaguar(2);
+
+    //Stores output from robotDrive
+    OutputStorage storageLeft = new OutputStorage();
+    OutputStorage storageRight = new OutputStorage();
 
     //DI 3 doesn't work
 
@@ -169,7 +199,10 @@ public class RobotTemplate extends IterativeRobot {
 
         //Input/output range for the gyro PID
         pidGyro.setInputRange(-360.0, 360.0);
-        pidGyro.setOutputRange(-1.0, 1.0);
+        pidGyro.setOutputRange(-0.2, 0.2);
+
+        //Tolerance
+        pidGyro.setTolerance(1.0 / (360.0 * 2.0));
 
         //Start the compressor
         compressor.start();
@@ -187,12 +220,12 @@ public class RobotTemplate extends IterativeRobot {
             //Print statements
             System.out.println("[" + mode + "]");
             System.out.println("DS DI 1: " + ds.getDigitalIn(1));
-            System.out.println("renc: " + encRight.pidGet() + " lenc: " + encLeft.pidGet() + " elevator: " + encElevator.pidGet());
+            System.out.println("renc: " + encRight.encoder.get() + " lenc: " + encLeft.encoder.get() + " elevator: " + encElevator.pidGet());
             System.out.println("rSet: " + pidRight.getSetpoint() + " lSet: " + pidLeft.getSetpoint() + " eSet: " + elevatorSetpoint);
             System.out.println("rPID: " + pidRight.get() + " lPID: " + pidLeft.get());
             System.out.println("manualElevator: " + manualElevatorToggle.get());
             System.out.println("elevAxis: " + stickOperator.getAxis(Joystick.AxisType.kY) + " leftAxis: " + stickDriver.getRawAxis(Driver.Y_AXIS_LEFT) + " rightAxis: " + stickDriver.getRawAxis(Driver.Y_AXIS_RIGHT));
-            System.out.println("Gyro PIDget: " + gyro.pidGet() +  " gyro output storage: " + gyroOutput.get());
+            System.out.println("Gyro PIDget: " + gyro.pidGet() + " gyro output storage: " + gyroOutput.get());
             System.out.println();
 
             //Update the last print time
@@ -205,6 +238,7 @@ public class RobotTemplate extends IterativeRobot {
         //Disable PIDs
         pidLeft.disable();
         pidRight.disable();
+        pidGyro.disable();
     }
     
     //Runs periodically during disabled period
@@ -216,25 +250,8 @@ public class RobotTemplate extends IterativeRobot {
     //Runs continuously during disabled period
     public void disabledContinuous() {
     }
-
-    //Runs at the beginning of autonomous period
-    public void autonomousInit() {
-        //Minibot defaults to up
-        minibotVertical.set(Relay.Value.kReverse);
-        minibotHorizontal.set(Relay.Value.kReverse);
-
-        //Default to slow driving mode
-        transmissionShift.set(Relay.Value.kReverse);
-
-        gyro.reset();
-        pidGyro.enable();
-    }
-
-    //Runs periodically during autonomous period
-    public void autonomousPeriodic() {
-    }
-
-    //Enumeration of autonomous modes
+    
+        //Enumeration of autonomous modes
     class AutonomousState {
         static final int Driving = 0;
         static final int Turning = 1;
@@ -244,6 +261,12 @@ public class RobotTemplate extends IterativeRobot {
 
     //Class that defines the current step in autonomous mode
     class Step {
+        //Constructor for Step
+        public Step(int Type, double Val) {
+            type = Type;
+            value = Val;
+        }
+
         //The type of step
         public int type = AutonomousState.Done;
 
@@ -256,10 +279,49 @@ public class RobotTemplate extends IterativeRobot {
         double value = 0.0;
     }
 
+    //Turn 45 degrees, drive forward 1m
+    Step autoOne[] = {
+                        new Step(AutonomousState.Turning, 90),
+                        new Step(AutonomousState.Driving, 1),
+                        new Step(AutonomousState.Turning, -90),
+                        new Step(AutonomousState.Done, 0),
+                    };
+
     //Array to hold steps -- changed depending on which autonomous mode we want
-    Step stepList[] = null;
+    Step stepList[] = autoOne;
     //Iterates through each step
-    int stepIndex = 0;
+    int stepIndex;
+
+    //Runs at the beginning of autonomous period
+    public void autonomousInit() {
+        //Minibot defaults to up
+        minibotVertical.set(Relay.Value.kReverse);
+        minibotHorizontal.set(Relay.Value.kReverse);
+
+        //Default to slow driving mode
+        transmissionShift.set(Relay.Value.kReverse);
+
+        //Reset gyro and enable PID on gyro
+        pidGyro.enable();
+        gyro.reset();
+
+        //Enable PID on wheels
+        pidLeft.enable();
+        pidRight.enable();
+
+        //Reset encoders
+        encLeft.reset();
+        encRight.reset();
+
+        //Current step
+        stepIndex = 0;
+    }
+
+    //Runs periodically during autonomous period
+    public void autonomousPeriodic() {
+        //Call our print function with the current mode
+        print("Autonomous");
+    }
 
     //Runs continuously during autonomous period
     public void autonomousContinuous() {
@@ -274,13 +336,13 @@ public class RobotTemplate extends IterativeRobot {
                 //If we want to drive forward
                 case AutonomousState.Driving:
                     //If we have reached our value for this step on the left or right side
-                    final boolean leftDone = encLeft.encoder.get() * COUNTS_PER_METRE >= currentStep.get();
-                    final boolean rightDone = encRight.encoder.get() * COUNTS_PER_METRE >= currentStep.get();
+                    final boolean leftDone = -encLeft.encoder.get() / COUNTS_PER_METRE >= currentStep.get();
+                    final boolean rightDone = encRight.encoder.get() / COUNTS_PER_METRE >= currentStep.get();
                     //Drive each side until we reach the value for each side
                     if(!leftDone)
-                        pidLeft.setSetpoint(0.3 * SLOW_MAX_ENCODER_RATE);
+                        pidLeft.setSetpoint(-0.4 * SLOW_MAX_ENCODER_RATE);
                     if(!rightDone)
-                        pidRight.setSetpoint(0.3 * SLOW_MAX_ENCODER_RATE);
+                        pidRight.setSetpoint(0.4 * SLOW_MAX_ENCODER_RATE);
                     //If the value is reached
                     if(leftDone && rightDone) {
                         //Go to the next step
@@ -292,11 +354,12 @@ public class RobotTemplate extends IterativeRobot {
                     //Set the setpoint for the gyro PID to the
                     pidGyro.setSetpoint(currentStep.get());
                     //Drive the motors with the output from the gyro PID
-                    pidLeft.setSetpoint(gyroOutput.get() * SLOW_MAX_ENCODER_RATE);
+                    pidLeft.setSetpoint(-gyroOutput.get() * SLOW_MAX_ENCODER_RATE);
                     pidRight.setSetpoint(-gyroOutput.get() * SLOW_MAX_ENCODER_RATE);
                     //If the target angle is reached
                     if(pidGyro.onTarget()) {
                         //Move to the next step
+                        System.out.println("on target at " + gyro.pidGet() + " setpoint: " + pidGyro.getSetpoint() + " pidgyro: " + pidGyro.get());
                         ++stepIndex;
                     }
                     break;
@@ -347,6 +410,10 @@ public class RobotTemplate extends IterativeRobot {
 
     //Runs continuously during teleoperated period
     public void teleopContinuous() {
+        //Don't allow the gyro to be more or less than 360 degrees
+        if(gyro.pidGet() < -360 || gyro.pidGet() > 360)
+            gyro.reset();
+
         //The elevator setpoint based on the corresponding button
         elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_GROUND) ? ElevatorSetpoint.ground : elevatorSetpoint;
         elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_ONE) ? ElevatorSetpoint.posOne : elevatorSetpoint;
@@ -425,7 +492,19 @@ public class RobotTemplate extends IterativeRobot {
             }
 
             //Move axis is first y-axis and rotate axis is second x-axis
+            //Let the robotdrive class calculate arcade drive for us
             robotDrive.arcadeDrive(stickDriver, Driver.Y_AXIS_LEFT, stickDriver, Driver.X_AXIS_RIGHT);
+
+            //Get the left and right values from what arcadedrive set
+            double left = jagLeft.get();
+            double right = jagRight.get();
+
+            //Stop the motors
+            jagLeft.set(0.0);
+            jagRight.set(0.0);
+
+            pidLeft.setSetpoint(left);
+            pidRight.setSetpoint(right);
         }
         else if (!arcadeToggle.get()) {
             //If PID is disabled
