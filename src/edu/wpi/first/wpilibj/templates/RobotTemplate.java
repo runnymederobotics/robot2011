@@ -380,8 +380,7 @@ public class RobotTemplate extends IterativeRobot {
                 //Sleep state
                 case AutonomousState.Sleep:
                     double time = currentStep.get();
-                    while(time > 0)
-                    {
+                    while(time > 0) {
                         print("Autonomous");
                         Timer.delay(1);
                         --time;
