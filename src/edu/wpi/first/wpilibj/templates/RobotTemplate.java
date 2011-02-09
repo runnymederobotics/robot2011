@@ -483,6 +483,8 @@ public class RobotTemplate extends IterativeRobot {
             //If we are below 0 then dont allow the elevator to go down
             if(encElevator.pidGet() <= 0)
                 axis = Math.max(0, axis);
+            if(encElevator.pidGet() >= MAX_ELEVATOR_COUNTS)
+                axis = Math.min(0, axis);
             vicElevator.set(axis);
         } else {
             //Difference between setpoint and our position
