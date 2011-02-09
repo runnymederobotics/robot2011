@@ -21,6 +21,8 @@ public class RobotTemplate extends IterativeRobot {
     static final double MINIBOT_RELEASE_TIME = 110.0;
     //Number of seconds after the minibot drops before we send it out horizontal
     static final double MINIBOT_HORIZONTAL_DELAY = 2.0;
+    //Tolerance for the gyro pid
+    static final double GYRO_TOLERANCE = 1;
 
     //Driver joystick
     class Driver {
@@ -47,9 +49,9 @@ public class RobotTemplate extends IterativeRobot {
         static final int ELEVATOR_STATE_SIX = 8;
         static final int ELEVATOR_STATE_FEED = 2;
         static final int ELEVATOR_MANUAL_TOGGLE = 5;
-        static final int ELEVATOR_REZERO = 6;
         static final int GRIPPER_TOGGLE = 3;
-        static final int ELBOW_TOGGLE = 4;
+        static final int ELBOW_UP = 6;
+        static final int ELBOW_DOWN = 4;
         static final int MINIBOT_RELEASE_ONE = 5;
         static final int MINIBOT_RELEASE_TWO = 6;
     }
@@ -67,9 +69,10 @@ public class RobotTemplate extends IterativeRobot {
     //Relays
     Relay transmissionShift = new Relay(2);
     Relay gripper = new Relay(3);
-    Relay elbow = new Relay(4);
-    Relay minibotVertical = new Relay(5);
-    Relay minibotHorizontal = new Relay(6);
+    Relay elbowOne = new Relay(4);
+    Relay elbowTwo = new Relay(5);
+    Relay minibotVertical = new Relay(6);
+    Relay minibotHorizontal = new Relay(7);
 
     //A storage class to hold the output of a PIDController
     class PIDOutputStorage implements PIDOutput {
@@ -156,10 +159,6 @@ public class RobotTemplate extends IterativeRobot {
     //Default -- gripper is closed
     Toggle gripperToggle = new Toggle(false);
 
-    //Toggle for the elbow button
-    //Default -- elbow is up
-    Toggle elbowToggle = new Toggle(true);
-
     //Toggle for arcade/tank drive
     //Default is tank drive
     Toggle arcadeToggle = new Toggle(false);
@@ -200,9 +199,6 @@ public class RobotTemplate extends IterativeRobot {
         //Input/output range for the gyro PID
         pidGyro.setInputRange(-360.0, 360.0);
         pidGyro.setOutputRange(-0.2, 0.2);
-
-        //Tolerance
-        pidGyro.setTolerance(1.0 / (360.0 * 2.0));
 
         //Start the compressor
         compressor.start();
@@ -257,6 +253,7 @@ public class RobotTemplate extends IterativeRobot {
         static final int Turning = 1;
         static final int Hanging = 2;
         static final int Done = 3;
+        static final int Sleep = 4;
     }
 
     //Class that defines the current step in autonomous mode
@@ -279,11 +276,13 @@ public class RobotTemplate extends IterativeRobot {
         double value = 0.0;
     }
 
-    //Turn 45 degrees, drive forward 1m
     Step autoOne[] = {
                         new Step(AutonomousState.Turning, 90),
+                        new Step(AutonomousState.Sleep, 5),
                         new Step(AutonomousState.Driving, 1),
+                        new Step(AutonomousState.Sleep, 5),
                         new Step(AutonomousState.Turning, -90),
+                        new Step(AutonomousState.Sleep, 5),
                         new Step(AutonomousState.Done, 0),
                     };
 
@@ -291,6 +290,8 @@ public class RobotTemplate extends IterativeRobot {
     Step stepList[] = autoOne;
     //Iterates through each step
     int stepIndex;
+    //Number of times our setpoint has been reached
+    int gyroCounter;
 
     //Runs at the beginning of autonomous period
     public void autonomousInit() {
@@ -315,6 +316,9 @@ public class RobotTemplate extends IterativeRobot {
 
         //Current step
         stepIndex = 0;
+
+        //We havent reached our setpoint
+        gyroCounter = 0;
     }
 
     //Runs periodically during autonomous period
@@ -344,30 +348,45 @@ public class RobotTemplate extends IterativeRobot {
                     if(!rightDone)
                         pidRight.setSetpoint(0.4 * SLOW_MAX_ENCODER_RATE);
                     //If the value is reached
-                    if(leftDone && rightDone) {
-                        //Go to the next step
+                    if(leftDone && rightDone)
                         ++stepIndex;
-                    }
                     break;
                 //If we want to turn
                 case AutonomousState.Turning:
-                    //Set the setpoint for the gyro PID to the
+                    //Disable PIDs for smoother turning
+                    if(pidLeft.isEnable() || pidRight.isEnable()) {
+                        pidLeft.disable();
+                        pidRight.disable();
+                    }
+                    //Set the setpoint for the gyro PID to the step's setpoint
                     pidGyro.setSetpoint(currentStep.get());
                     //Drive the motors with the output from the gyro PID
-                    pidLeft.setSetpoint(-gyroOutput.get() * SLOW_MAX_ENCODER_RATE);
-                    pidRight.setSetpoint(-gyroOutput.get() * SLOW_MAX_ENCODER_RATE);
-                    //If the target angle is reached
-                    if(pidGyro.onTarget()) {
-                        //Move to the next step
-                        System.out.println("on target at " + gyro.pidGet() + " setpoint: " + pidGyro.getSetpoint() + " pidgyro: " + pidGyro.get());
+                    jagLeft.set(-gyroOutput.get());
+                    jagRight.set(-gyroOutput.get());
+                    //Difference between our position and our setpoint
+                    final double delta = currentStep.get() - gyro.pidGet();
+                    //If the gyro is below or above the target angle depending on the direction we are turning
+                    if(Math.abs(delta) < GYRO_TOLERANCE)
+                        ++gyroCounter;
+                    if(gyroCounter >= 10)
                         ++stepIndex;
-                    }
                     break;
                 //If we want to use the elevator
                 case AutonomousState.Hanging:
                     break;
                 //If we are done our autonomous mode
                 case AutonomousState.Done:
+                    break;
+                //Sleep state
+                case AutonomousState.Sleep:
+                    double time = currentStep.get();
+                    while(time > 0)
+                    {
+                        print("Autonomous");
+                        Timer.delay(1);
+                        --time;
+                        Watchdog.getInstance().feed();
+                    }
                     break;
             }
         }
@@ -377,9 +396,37 @@ public class RobotTemplate extends IterativeRobot {
             encLeft.reset();
             encRight.reset();
             gyro.reset();
+            //Enable PIDs
+            pidLeft.enable();
+            pidRight.enable();
             //Stop
             pidLeft.setSetpoint(0.0);
             pidRight.setSetpoint(0.0);
+            //Reset gyro counter to 0
+            gyroCounter = 0;
+        }
+    }
+
+    class ElbowState {
+        static final int Horizontal = 0;
+        static final int Middle = 1;
+        static final int Vertical = 2;
+    }
+    
+    class ButtonPress {
+        boolean value = false;
+        boolean lastValue = false;
+
+        public void feed(boolean val) {
+            if(!lastValue && val)
+                value = true;
+            else
+                value = false;
+            lastValue = val;
+        }
+
+        public boolean get() {
+            return value;
         }
     }
 
@@ -389,6 +436,10 @@ public class RobotTemplate extends IterativeRobot {
     double minibotReleaseTime;
     //Releasing minibot
     boolean releaseMinibot;
+    //State of elbow
+    int elbowState;
+    ButtonPress elbowUp = new ButtonPress();
+    ButtonPress elbowDown = new ButtonPress();
 
     //Runs at the beginning of teleoperated period
     public void teleopInit() {
@@ -428,13 +479,16 @@ public class RobotTemplate extends IterativeRobot {
         manualElevatorToggle.feed(stickOperator.getRawButton(Operator.ELEVATOR_MANUAL_TOGGLE));
         //Manual or automated elevator control
         if(manualElevatorToggle.get()) {
-            //Drive the elevator based on the y axis of the operator joystick
-            vicElevator.set(-stickOperator.getAxis(Joystick.AxisType.kY));
+            double axis = -stickOperator.getAxis(Joystick.AxisType.kY);
+            //If we are below 0 then dont allow the elevator to go down
+            if(encElevator.pidGet() <= 0)
+                axis = Math.max(0, axis);
+            vicElevator.set(axis);
         } else {
             //Difference between setpoint and our position
             final double error = elevatorSetpoint - encElevator.pidGet();
 
-            //We can be off by 5% going up, 1% going down
+            //We can be off by 5%
             final double toleranceWhileGoingUp = MAX_ELEVATOR_COUNTS * 0.05;
             final double toleranceWhileGoingDown = -MAX_ELEVATOR_COUNTS * 0.05;
 
@@ -442,22 +496,13 @@ public class RobotTemplate extends IterativeRobot {
             final double speedWhileGoingUp = 1.0;
             final double speedWhileGoingDown = -0.7;
 
-            //Go up when below setpoint, error is more than the tolerance
-            if(error > 0 && error > toleranceWhileGoingUp) {
+            //Go up when below setpoint, down when above setpoint
+            if(error > 0 && error > toleranceWhileGoingUp)
                 vicElevator.set(speedWhileGoingUp);
-            //Go down when above setpoint, error is more than the tolerance
-            } else if(error < 0 && error < toleranceWhileGoingDown) {
+            else if(error < 0 && error < toleranceWhileGoingDown)
                 vicElevator.set(speedWhileGoingDown);
-            //We have reached our setpoint
-            } else {
-                //Turn off
+            else
                 vicElevator.set(0.0);
-            }
-        }
-
-        //Re-zero the elevator encoder is re-zero button is pressed
-        if(stickOperator.getRawButton(Operator.ELEVATOR_REZERO)) {
-            encElevator.reset();
         }
 
         //Feed the toggle on the transmission shifter button
@@ -475,10 +520,16 @@ public class RobotTemplate extends IterativeRobot {
         //Set the gripper to open or closed based on the state of the toggle
         gripper.set(gripperToggle.get() ? Relay.Value.kForward : Relay.Value.kReverse);
 
-        //Feed the toggle on the elbow button
-        elbowToggle.feed(stickOperator.getRawButton(Operator.ELBOW_TOGGLE));
-        //Set the elbow to open or closed based on the state of the toggle
-        elbow.set(elbowToggle.get() ? Relay.Value.kForward : Relay.Value.kReverse);
+        //Feed the buttons
+        elbowUp.feed(stickOperator.getRawButton(Operator.ELBOW_UP));
+        elbowDown.feed(stickOperator.getRawButton(Operator.ELBOW_DOWN));
+
+        if(elbowUp.get())
+            elbowState += elbowState < ElbowState.Vertical ? 1 : 0;
+        if(elbowDown.get())
+            elbowState -= elbowState > ElbowState.Horizontal ? 1 : 0;
+        elbowOne.set(elbowState == ElbowState.Horizontal ? Relay.Value.kForward : Relay.Value.kReverse);
+        elbowTwo.set(elbowState <= ElbowState.Middle ? Relay.Value.kForward : Relay.Value.kReverse);
 
         //Feed the toggle on the arcade/tank drive button
         arcadeToggle.feed(stickDriver.getRawButton(Driver.ARCADE_TOGGLE));
