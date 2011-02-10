@@ -16,7 +16,7 @@ public class RobotTemplate extends IterativeRobot {
     //Starting encoder counts
     static final double ELEVATOR_BASE = 0;
     //Number of elevator encoder counts
-    static final int MAX_ELEVATOR_COUNTS = 2800;
+    static final int MAX_ELEVATOR_COUNTS = 2400;
     //Number of seconds to wait in teleoperated mode before the minibot is allowed to be deployed
     static final double MINIBOT_RELEASE_TIME = 110.0;
     //Number of seconds after the minibot drops before we send it out horizontal
@@ -67,7 +67,7 @@ public class RobotTemplate extends IterativeRobot {
     Compressor compressor = new Compressor(10, 1);
 
     //Relays
-    Relay transmissionShift = new Relay(2);
+    DoubleSolenoid transmissionShift = new DoubleSolenoid(1, 2);
     Relay gripper = new Relay(3);
     Relay elbowOne = new Relay(4);
     Relay elbowTwo = new Relay(5);
@@ -198,7 +198,7 @@ public class RobotTemplate extends IterativeRobot {
 
         //Input/output range for the gyro PID
         pidGyro.setInputRange(-360.0, 360.0);
-        pidGyro.setOutputRange(-0.2, 0.2);
+        pidGyro.setOutputRange(-0.5, 0.5);
 
         //Start the compressor
         compressor.start();
@@ -215,7 +215,7 @@ public class RobotTemplate extends IterativeRobot {
         if(curPrintTime - lastPrintTime > 0.5) {
             //Print statements
             System.out.println("[" + mode + "]");
-            System.out.println("DS DI 1: " + ds.getDigitalIn(1));
+            System.out.println("DS DI 1: " + ds.getDigitalIn(1) + " DS AI 1: " + ds.getAnalogIn(1));
             System.out.println("renc: " + encRight.encoder.get() + " lenc: " + encLeft.encoder.get() + " elevator: " + encElevator.pidGet());
             System.out.println("rSet: " + pidRight.getSetpoint() + " lSet: " + pidLeft.getSetpoint() + " eSet: " + elevatorSetpoint);
             System.out.println("rPID: " + pidRight.get() + " lPID: " + pidLeft.get());
@@ -276,18 +276,22 @@ public class RobotTemplate extends IterativeRobot {
         double value = 0.0;
     }
 
-    Step autoOne[] = {
+    Step posOne[] = {
                         new Step(AutonomousState.Turning, 90),
                         new Step(AutonomousState.Sleep, 5),
-                        new Step(AutonomousState.Driving, 1),
+                        new Step(AutonomousState.Driving, 0.5),
                         new Step(AutonomousState.Sleep, 5),
                         new Step(AutonomousState.Turning, -90),
                         new Step(AutonomousState.Sleep, 5),
                         new Step(AutonomousState.Done, 0),
                     };
 
+    Step posTwo[] = {
+
+                    };
+
     //Array to hold steps -- changed depending on which autonomous mode we want
-    Step stepList[] = autoOne;
+    Step stepList[] = null;
     //Iterates through each step
     int stepIndex;
     //Number of times our setpoint has been reached
@@ -300,7 +304,7 @@ public class RobotTemplate extends IterativeRobot {
         minibotHorizontal.set(Relay.Value.kReverse);
 
         //Default to slow driving mode
-        transmissionShift.set(Relay.Value.kReverse);
+        transmissionShift.set(DoubleSolenoid.Value.kReverse);
 
         //Reset gyro and enable PID on gyro
         pidGyro.enable();
@@ -319,6 +323,8 @@ public class RobotTemplate extends IterativeRobot {
 
         //We havent reached our setpoint
         gyroCounter = 0;
+
+        stepList = posOne;
     }
 
     //Runs periodically during autonomous period
@@ -368,7 +374,7 @@ public class RobotTemplate extends IterativeRobot {
                     //If the gyro is below or above the target angle depending on the direction we are turning
                     if(Math.abs(delta) < GYRO_TOLERANCE)
                         ++gyroCounter;
-                    if(gyroCounter >= 10)
+                    if(gyroCounter >= 100)
                         ++stepIndex;
                     break;
                 //If we want to use the elevator
@@ -380,12 +386,17 @@ public class RobotTemplate extends IterativeRobot {
                 //Sleep state
                 case AutonomousState.Sleep:
                     double time = currentStep.get();
+                    pidLeft.disable();
+                    pidRight.disable();
                     while(time > 0) {
                         print("Autonomous");
                         Timer.delay(1);
                         --time;
                         Watchdog.getInstance().feed();
                     }
+                    pidLeft.enable();
+                    pidLeft.enable();
+                    ++stepIndex;
                     break;
             }
         }
@@ -509,7 +520,7 @@ public class RobotTemplate extends IterativeRobot {
         //Feed the toggle on the transmission shifter button
         transToggle.feed(stickDriver.getRawButton(Driver.TRANS_TOGGLE));
         //Set the transmission shifter to open or closed based on the state of the toggle
-        transmissionShift.set(transToggle.get() ? Relay.Value.kForward : Relay.Value.kReverse);
+        transmissionShift.set(transToggle.get() ? DoubleSolenoid.Value.kForward : DoubleSolenoid.Value.kReverse);
 
         //Determine the input range to use (max encoder rate) to use depending on the transmission state we are in
         double maxEncoderRate = transToggle.get() ? FAST_MAX_ENCODER_RATE : SLOW_MAX_ENCODER_RATE;
@@ -534,6 +545,7 @@ public class RobotTemplate extends IterativeRobot {
 
         //Feed the toggle on the arcade/tank drive button
         arcadeToggle.feed(stickDriver.getRawButton(Driver.ARCADE_TOGGLE));
+
         //Drive arcade or tank based on the state of the toggle
         if(arcadeToggle.get()) {
             //If PID is enabled
@@ -545,18 +557,9 @@ public class RobotTemplate extends IterativeRobot {
 
             //Move axis is first y-axis and rotate axis is second x-axis
             //Let the robotdrive class calculate arcade drive for us
-            robotDrive.arcadeDrive(stickDriver, Driver.Y_AXIS_LEFT, stickDriver, Driver.X_AXIS_RIGHT);
-
-            //Get the left and right values from what arcadedrive set
-            double left = jagLeft.get();
-            double right = jagRight.get();
-
-            //Stop the motors
-            jagLeft.set(0.0);
-            jagRight.set(0.0);
-
-            pidLeft.setSetpoint(left);
-            pidRight.setSetpoint(right);
+            //robotDrive.arcadeDrive(stickDriver, Driver.Y_AXIS_LEFT, stickDriver, Driver.X_AXIS_RIGHT);
+            jagLeft.set(stickDriver.getRawAxis(Driver.Y_AXIS_LEFT));
+            jagRight.set(stickDriver.getRawAxis(Driver.Y_AXIS_RIGHT));
         }
         else if (!arcadeToggle.get()) {
             //If PID is disabled
