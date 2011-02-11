@@ -71,11 +71,11 @@ public class RobotTemplate extends IterativeRobot {
     //Relays
     Solenoid transShiftSingle;
     DoubleSolenoid transShiftDouble;
-    Relay gripper = new Relay(3);
-    Relay elbowOne = new Relay(4);
-    Relay elbowTwo = new Relay(5);
-    Relay minibotVertical = new Relay(6);
-    Relay minibotHorizontal = new Relay(7);
+    Solenoid gripper = new Solenoid(3);
+    Solenoid elbowOne = new Solenoid(4);
+    Solenoid elbowTwo = new Solenoid(5);
+    DoubleSolenoid minibotVertical = new DoubleSolenoid(6, 7);
+    Solenoid minibotHorizontal = new Solenoid(8);
 
     //A storage class to hold the output of a PIDController
     class PIDOutputStorage implements PIDOutput {
@@ -334,8 +334,8 @@ public class RobotTemplate extends IterativeRobot {
     //Runs at the beginning of autonomous period
     public void autonomousInit() {
         //Minibot defaults to up
-        minibotVertical.set(Relay.Value.kReverse);
-        minibotHorizontal.set(Relay.Value.kReverse);
+        minibotVertical.set(DoubleSolenoid.Value.kReverse);
+        minibotHorizontal.set(false);
 
         //Default to slow driving mode
         if(!PRACTISE_ROBOT)
@@ -506,7 +506,7 @@ public class RobotTemplate extends IterativeRobot {
                     break;
                 //To release the tube
                 case AutonomousState.Release:
-                    gripper.set(releaseTube ? Relay.Value.kForward : Relay.Value.kReverse);
+                    gripper.set(releaseTube);
                     ++stepIndex;
                     break;
                 //If we are done our autonomous mode
@@ -588,8 +588,8 @@ public class RobotTemplate extends IterativeRobot {
         releaseMinibot = false;
 
         //Minibot defaults to up
-        minibotVertical.set(Relay.Value.kReverse);
-        minibotHorizontal.set(Relay.Value.kReverse);
+        minibotVertical.set(DoubleSolenoid.Value.kReverse);
+        minibotHorizontal.set(false);
     }
 
     //Runs periodically during teleoperated period
@@ -645,18 +645,19 @@ public class RobotTemplate extends IterativeRobot {
         //Feed the toggle on the gripper button
         gripperToggle.feed(stickOperator.getRawButton(Operator.GRIPPER_TOGGLE));
         //Set the gripper to open or closed based on the state of the toggle
-        gripper.set(gripperToggle.get() ? Relay.Value.kForward : Relay.Value.kReverse);
+        gripper.set(gripperToggle.get());
 
         //Feed the buttons
         elbowUp.feed(stickOperator.getRawButton(Operator.ELBOW_UP));
         elbowDown.feed(stickOperator.getRawButton(Operator.ELBOW_DOWN));
 
+        //Horizontal < Middle < Vertical
         if(elbowUp.get())
             elbowState += elbowState < ElbowState.Vertical ? 1 : 0;
         if(elbowDown.get())
             elbowState -= elbowState > ElbowState.Horizontal ? 1 : 0;
-        elbowOne.set(elbowState == ElbowState.Horizontal ? Relay.Value.kForward : Relay.Value.kReverse);
-        elbowTwo.set(elbowState <= ElbowState.Middle ? Relay.Value.kForward : Relay.Value.kReverse);
+        elbowOne.set(elbowState == ElbowState.Horizontal);
+        elbowTwo.set(elbowState <= ElbowState.Middle);
 
         //Feed the toggle on the arcade/tank drive button
         arcadeToggle.feed(stickDriver.getRawButton(Driver.ARCADE_TOGGLE));
@@ -707,14 +708,14 @@ public class RobotTemplate extends IterativeRobot {
             //If we want to release
             if(releaseMinibot) {
                 //Set the vertical relay to released
-                minibotVertical.set(Relay.Value.kForward);
+                minibotVertical.set(DoubleSolenoid.Value.kForward);
                 //If the release time is 0 (we haven't set the release time yet) then set the release time
                 //Allows us to set the release time only once
                 minibotReleaseTime = minibotReleaseTime == 0.0 ? Timer.getFPGATimestamp() : minibotReleaseTime;
                 //If it's been at least 2 seconds since the release was triggered
                 if(Timer.getFPGATimestamp() - minibotReleaseTime >= MINIBOT_HORIZONTAL_DELAY) {
                     //Set the horizontal relay to released
-                    minibotHorizontal.set(Relay.Value.kForward);
+                    minibotHorizontal.set(true);
                 }
             }
         }
