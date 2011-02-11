@@ -3,6 +3,8 @@ package edu.wpi.first.wpilibj.templates;
 import edu.wpi.first.wpilibj.*;
 
 public class RobotTemplate extends IterativeRobot {
+    //Practise robot or competition robot
+    static final boolean PRACTISE_ROBOT = false;
     //Encoder rate at max speed in slow gear
     static final double SLOW_MAX_ENCODER_RATE = 750.0;
     //Encoder rate at max speed in fast gear
@@ -67,7 +69,8 @@ public class RobotTemplate extends IterativeRobot {
     Compressor compressor = new Compressor(10, 1);
 
     //Relays
-    DoubleSolenoid transmissionShift = new DoubleSolenoid(1, 2);
+    Solenoid transShiftSingle;
+    DoubleSolenoid transShiftDouble;
     Relay gripper = new Relay(3);
     Relay elbowOne = new Relay(4);
     Relay elbowTwo = new Relay(5);
@@ -202,6 +205,12 @@ public class RobotTemplate extends IterativeRobot {
 
         //Start the compressor
         compressor.start();
+
+        //Initialize our transmissions based on if we are using the practise robot or the real robot
+        if(!PRACTISE_ROBOT)
+            transShiftSingle = new Solenoid(1);
+        else
+            transShiftDouble = new DoubleSolenoid(1, 2);
     }
     
     //Used in teleopPeriodic to print only once a second
@@ -229,6 +238,31 @@ public class RobotTemplate extends IterativeRobot {
         }
     }
 
+    //Returns whether or not the setpoint has been reached
+    public boolean elevatorPID() {
+        //Difference between setpoint and our position
+        final double error = elevatorSetpoint - encElevator.pidGet();
+
+        //We can be off by 5%
+        final double toleranceWhileGoingUp = MAX_ELEVATOR_COUNTS * 0.05;
+        final double toleranceWhileGoingDown = -MAX_ELEVATOR_COUNTS * 0.05;
+
+        //Different speeds going up/down
+        final double speedWhileGoingUp = 1.0;
+        final double speedWhileGoingDown = -0.7;
+
+        //Go up when below setpoint, down when above setpoint
+        if(error > 0 && error > toleranceWhileGoingUp)
+            vicElevator.set(speedWhileGoingUp);
+        else if(error < 0 && error < toleranceWhileGoingDown)
+            vicElevator.set(speedWhileGoingDown);
+        else {
+            vicElevator.set(0.0);
+            return true;
+        }
+        return false;
+    }
+
     //Runs at the beginning of disabled period
     public void disabledInit() {
         //Disable PIDs
@@ -252,13 +286,18 @@ public class RobotTemplate extends IterativeRobot {
         static final int Driving = 0;
         static final int Turning = 1;
         static final int Hanging = 2;
-        static final int Done = 3;
-        static final int Sleep = 4;
+        static final int Release = 3;
+        static final int Done = 4;
+        static final int Sleep = 5;
     }
 
     //Class that defines the current step in autonomous mode
     class Step {
-        //Constructor for Step
+        //Constructors for Step
+        public Step(int Type) {
+            type = Type;
+        }
+
         public Step(int Type, double Val) {
             type = Type;
             value = Val;
@@ -276,26 +315,21 @@ public class RobotTemplate extends IterativeRobot {
         double value = 0.0;
     }
 
-    Step posOne[] = {
-                        new Step(AutonomousState.Turning, 90),
-                        new Step(AutonomousState.Sleep, 5),
-                        new Step(AutonomousState.Driving, 0.5),
-                        new Step(AutonomousState.Sleep, 5),
-                        new Step(AutonomousState.Turning, -90),
-                        new Step(AutonomousState.Sleep, 5),
-                        new Step(AutonomousState.Done, 0),
-                    };
-
-    Step posTwo[] = {
-
-                    };
-
     //Array to hold steps -- changed depending on which autonomous mode we want
     Step stepList[] = null;
     //Iterates through each step
     int stepIndex;
     //Number of times our setpoint has been reached
     int gyroCounter;
+
+    boolean doNothing = ds.getDigitalIn(1);
+    boolean heightOne = ds.getDigitalIn(2);
+    boolean heightTwo = ds.getDigitalIn(3);
+    boolean heightThree = ds.getDigitalIn(4);
+    boolean releaseTube = ds.getDigitalIn(5);
+    boolean hangLeft = ds.getDigitalIn(6);
+    boolean hangMiddle = ds.getDigitalIn(7);
+    boolean hangRIght = ds.getDigitalIn(8);
 
     //Runs at the beginning of autonomous period
     public void autonomousInit() {
@@ -304,7 +338,10 @@ public class RobotTemplate extends IterativeRobot {
         minibotHorizontal.set(Relay.Value.kReverse);
 
         //Default to slow driving mode
-        transmissionShift.set(DoubleSolenoid.Value.kReverse);
+        if(!PRACTISE_ROBOT)
+            transShiftSingle.set(false);
+        else
+            transShiftDouble.set(DoubleSolenoid.Value.kReverse);
 
         //Reset gyro and enable PID on gyro
         pidGyro.enable();
@@ -324,7 +361,92 @@ public class RobotTemplate extends IterativeRobot {
         //We havent reached our setpoint
         gyroCounter = 0;
 
-        stepList = posOne;
+        Step posOne[] = {
+                            new Step(AutonomousState.Driving, 0.5),
+                            new Step(AutonomousState.Hanging),
+                            new Step(AutonomousState.Release),
+                            new Step(AutonomousState.Done, 0),
+        };
+        Step posTwo[] = {
+                            new Step(AutonomousState.Driving, 0.5),
+                            new Step(AutonomousState.Hanging),
+                            new Step(AutonomousState.Release),
+                            new Step(AutonomousState.Done, 0),
+        };
+        Step posThree[] = {
+                            new Step(AutonomousState.Driving, 0.5),
+                            new Step(AutonomousState.Hanging),
+                            new Step(AutonomousState.Release),
+                            new Step(AutonomousState.Done, 0),
+        };
+        Step posFour[] = {
+                            new Step(AutonomousState.Driving, 0.5),
+                            new Step(AutonomousState.Hanging),
+                            new Step(AutonomousState.Release),
+                            new Step(AutonomousState.Done, 0),
+        };
+        Step posFive[] = {
+                            new Step(AutonomousState.Driving, 0.5),
+                            new Step(AutonomousState.Hanging),
+                            new Step(AutonomousState.Release),
+                            new Step(AutonomousState.Done, 0),
+        };
+        Step posSix[] = {
+                            new Step(AutonomousState.Driving, 0.5),
+                            new Step(AutonomousState.Hanging),
+                            new Step(AutonomousState.Release),
+                            new Step(AutonomousState.Done, 0),
+        };
+
+        //Round the analog input
+        int position = 0;
+        double input = ds.getAnalogIn(1);
+        
+        if(input - Math.floor(input) < 0.5)
+            position = (int)Math.floor(input);
+
+        if(input - Math.floor(input) >= 0.5)
+            position = (int)Math.ceil(input);
+
+        switch(position) {
+            default:
+            case 0:
+                stepList = posOne;
+                break;
+            case 1:
+                stepList = posTwo;
+                break;
+            case 2:
+                stepList = posThree;
+                break;
+            case 3:
+                stepList = posFour;
+                break;
+            case 4:
+                stepList = posFive;
+                break;
+            case 5:
+                stepList = posSix;
+                break;
+        }
+
+        if(doNothing) {
+            stepList = new Step[] {
+                new Step(AutonomousState.Done, 0),
+            };
+        }
+
+        //Determine the setpoint of the elevator
+        elevatorSetpoint = ElevatorSetpoint.posOne;
+
+        elevatorSetpoint = heightOne && position != 1 && position != 4 ? ElevatorSetpoint.posOne : elevatorSetpoint;
+        elevatorSetpoint = heightOne && (position == 1 || position == 4) ? ElevatorSetpoint.posTwo : elevatorSetpoint;
+
+        elevatorSetpoint = heightTwo && position != 1 && position != 4 ? ElevatorSetpoint.posThree : elevatorSetpoint;
+        elevatorSetpoint = heightTwo && (position == 1 || position == 4) ? ElevatorSetpoint.posFour : elevatorSetpoint;
+
+        elevatorSetpoint = heightThree && position != 1 && position != 4 ? ElevatorSetpoint.posFive : elevatorSetpoint;
+        elevatorSetpoint = heightThree && (position == 1 || position == 4) ? ElevatorSetpoint.posSix : elevatorSetpoint;
     }
 
     //Runs periodically during autonomous period
@@ -379,6 +501,13 @@ public class RobotTemplate extends IterativeRobot {
                     break;
                 //If we want to use the elevator
                 case AutonomousState.Hanging:
+                    if(elevatorPID())
+                        ++stepIndex;
+                    break;
+                //To release the tube
+                case AutonomousState.Release:
+                    gripper.set(releaseTube ? Relay.Value.kForward : Relay.Value.kReverse);
+                    ++stepIndex;
                     break;
                 //If we are done our autonomous mode
                 case AutonomousState.Done:
@@ -497,30 +626,16 @@ public class RobotTemplate extends IterativeRobot {
                 axis = Math.min(0, axis);
             vicElevator.set(axis);
         } else {
-            //Difference between setpoint and our position
-            final double error = elevatorSetpoint - encElevator.pidGet();
-
-            //We can be off by 5%
-            final double toleranceWhileGoingUp = MAX_ELEVATOR_COUNTS * 0.05;
-            final double toleranceWhileGoingDown = -MAX_ELEVATOR_COUNTS * 0.05;
-
-            //Different speeds going up/down
-            final double speedWhileGoingUp = 1.0;
-            final double speedWhileGoingDown = -0.7;
-
-            //Go up when below setpoint, down when above setpoint
-            if(error > 0 && error > toleranceWhileGoingUp)
-                vicElevator.set(speedWhileGoingUp);
-            else if(error < 0 && error < toleranceWhileGoingDown)
-                vicElevator.set(speedWhileGoingDown);
-            else
-                vicElevator.set(0.0);
+            elevatorPID();
         }
 
         //Feed the toggle on the transmission shifter button
         transToggle.feed(stickDriver.getRawButton(Driver.TRANS_TOGGLE));
         //Set the transmission shifter to open or closed based on the state of the toggle
-        transmissionShift.set(transToggle.get() ? DoubleSolenoid.Value.kForward : DoubleSolenoid.Value.kReverse);
+        if(!PRACTISE_ROBOT)
+            transShiftSingle.set(transToggle.get());
+        else
+            transShiftDouble.set(transToggle.get() ? DoubleSolenoid.Value.kForward : DoubleSolenoid.Value.kReverse);
 
         //Determine the input range to use (max encoder rate) to use depending on the transmission state we are in
         double maxEncoderRate = transToggle.get() ? FAST_MAX_ENCODER_RATE : SLOW_MAX_ENCODER_RATE;
