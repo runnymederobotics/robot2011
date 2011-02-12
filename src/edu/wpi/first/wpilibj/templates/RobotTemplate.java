@@ -4,7 +4,7 @@ import edu.wpi.first.wpilibj.*;
 
 public class RobotTemplate extends IterativeRobot {
     //Practise robot or competition robot
-    static final boolean PRACTISE_ROBOT = false;
+    static final boolean PRACTISE_ROBOT = true;
     //Encoder rate at max speed in slow gear
     static final double SLOW_MAX_ENCODER_RATE = 750.0;
     //Encoder rate at max speed in fast gear
@@ -71,9 +71,9 @@ public class RobotTemplate extends IterativeRobot {
     //Relays
     Solenoid transShiftSingle;
     DoubleSolenoid transShiftDouble;
-    Solenoid gripper = new Solenoid(3);
-    Solenoid elbowOne = new Solenoid(4);
-    Solenoid elbowTwo = new Solenoid(5);
+    Solenoid gripper = new Solenoid(5);
+    Solenoid elbowOne = new Solenoid(3);
+    Solenoid elbowTwo = new Solenoid(4);
     DoubleSolenoid minibotVertical = new DoubleSolenoid(6, 7);
     Solenoid minibotHorizontal = new Solenoid(8);
 
@@ -362,7 +362,7 @@ public class RobotTemplate extends IterativeRobot {
         gyroCounter = 0;
 
         Step posOne[] = {
-                            new Step(AutonomousState.Driving, 0.5),
+                            //new Step(AutonomousState.Driving, 0.5),
                             new Step(AutonomousState.Hanging),
                             new Step(AutonomousState.Release),
                             new Step(AutonomousState.Done, 0),
@@ -620,10 +620,10 @@ public class RobotTemplate extends IterativeRobot {
         if(manualElevatorToggle.get()) {
             double axis = -stickOperator.getAxis(Joystick.AxisType.kY);
             //If we are below 0 then dont allow the elevator to go down
-            if(encElevator.pidGet() <= 0)
+            /*if(encElevator.pidGet() <= 0)
                 axis = Math.max(0, axis);
             if(encElevator.pidGet() >= MAX_ELEVATOR_COUNTS)
-                axis = Math.min(0, axis);
+                axis = Math.min(0, axis);*/
             vicElevator.set(axis);
         } else {
             elevatorPID();
@@ -656,8 +656,8 @@ public class RobotTemplate extends IterativeRobot {
             elbowState += elbowState < ElbowState.Vertical ? 1 : 0;
         if(elbowDown.get())
             elbowState -= elbowState > ElbowState.Horizontal ? 1 : 0;
-        elbowOne.set(elbowState == ElbowState.Horizontal);
-        elbowTwo.set(elbowState <= ElbowState.Middle);
+        elbowOne.set(elbowState != ElbowState.Horizontal);
+        elbowTwo.set(elbowState > ElbowState.Middle);
 
         //Feed the toggle on the arcade/tank drive button
         arcadeToggle.feed(stickDriver.getRawButton(Driver.ARCADE_TOGGLE));
