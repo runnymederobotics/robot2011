@@ -122,14 +122,14 @@ public class RobotTemplate extends IterativeRobot {
     PIDController pidRight = new PIDController(0.0, 0.0005, 0.0, encRight, jagRight, 0.005);
     PIDController pidGyro = new PIDController(0.0005, 0.0005, 0.0, gyro, gyroOutput, 0.005);
 
-    //Toggle for manual or automated elevator control Default -- automated
-    Toggle manualElevatorToggle = new Toggle(false);
-    //Toggle for the transmission shifter button Default -- low gear
-    Toggle transToggle = new Toggle(false);
-    //Toggle for the gripper button Default -- gripper is closed
-    Toggle gripperToggle = new Toggle(false);
-    //Toggle for arcade/tank drive Default is tank drive
-    Toggle arcadeToggle = new Toggle(false);
+    //Toggle for manual or automated elevator control
+    Toggle manualElevatorToggle = new Toggle(false); //Automated elevator
+    //Toggle for the transmission shifter
+    Toggle transToggle = new Toggle(false); //Low gear
+    //Toggle for the gripper
+    Toggle gripperToggle = new Toggle(true); //Gripper closed
+    //Toggle for arcade/tank drive
+    Toggle arcadeToggle = new Toggle(false); //Tank drive
 
     //Enumeration of setpoints for different heights of the elevator
     class ElevatorSetpoint {
@@ -206,12 +206,14 @@ public class RobotTemplate extends IterativeRobot {
         print("Disabled");
     }
 
-    //Runs continuously during disabled period
-    public void disabledContinuous() {
-    }
+    //List of autonomous steps
+    Step stepList[] = {
+        new Step(AutonomousState.Hanging),
+        new Step(AutonomousState.Driving, 1),
+        new Step(AutonomousState.Release),
+        new Step(AutonomousState.Done, 0),
+    };
 
-    //Array to hold steps -- changed depending on which autonomous mode we want
-    Step stepList[] = null;
     //Iterates through each step
     int stepIndex;
     //Number of times our setpoint has been reached
@@ -224,46 +226,6 @@ public class RobotTemplate extends IterativeRobot {
     boolean staggeredPeg;
     boolean releaseTube;
     double startPosition;
-
-    Step posOne[] = {
-        new Step(AutonomousState.Hanging),
-        new Step(AutonomousState.Driving, 1),
-        new Step(AutonomousState.Release),
-        new Step(AutonomousState.Done, 0),
-    };
-    Step posTwo[] = {
-        new Step(AutonomousState.Turning, 90),
-        new Step(AutonomousState.Sleep, 3),
-        new Step(AutonomousState.Turning, -90),
-        new Step(AutonomousState.Sleep, 3),
-        new Step(AutonomousState.Done, 0),
-    };
-    Step posThree[] = {
-        new Step(AutonomousState.Driving, 1),
-        new Step(AutonomousState.Turning, -45),
-        new Step(AutonomousState.Driving, 1),
-        new Step(AutonomousState.Turning, 45),
-        new Step(AutonomousState.Driving, 1),
-        new Step(AutonomousState.Done, 0),
-    };
-    Step posFour[] = {
-        new Step(AutonomousState.Driving, 2),
-        new Step(AutonomousState.Hanging),
-        new Step(AutonomousState.Release),
-        new Step(AutonomousState.Done, 0),
-    };
-    Step posFive[] = {
-        new Step(AutonomousState.Driving, 2),
-        new Step(AutonomousState.Hanging),
-        new Step(AutonomousState.Release),
-        new Step(AutonomousState.Done, 0),
-    };
-    Step posSix[] = {
-        new Step(AutonomousState.Driving, 2),
-        new Step(AutonomousState.Hanging),
-        new Step(AutonomousState.Release),
-        new Step(AutonomousState.Done, 0),
-    };
 
     //Runs at the beginning of autonomous period
     public void autonomousInit() {
@@ -314,8 +276,6 @@ public class RobotTemplate extends IterativeRobot {
         }
 
         //Determine the setpoint of the elevator
-        elevatorSetpoint = ElevatorSetpoint.ground;
-
         elevatorSetpoint = (heightOne && !staggeredPeg) ? ElevatorSetpoint.posOne : elevatorSetpoint;
         elevatorSetpoint = (heightOne && staggeredPeg) ? ElevatorSetpoint.posTwo : elevatorSetpoint;
 
@@ -406,6 +366,8 @@ public class RobotTemplate extends IterativeRobot {
                     if(releaseTube) {
                         setElbow(ElbowState.Horizontal);
                         gripper.set(DoubleSolenoid.Value.kReverse);
+                        //Toggle the gripper to be open at the beginning of teleop
+                        gripperToggle.feed(true);
                     }
                     ++stepIndex;
                     break;
