@@ -3,6 +3,54 @@ package edu.wpi.first.wpilibj.templates;
 import edu.wpi.first.wpilibj.*;
 import edu.wpi.first.wpilibj.parsing.IDeviceController;
 
+//Driver joystick
+class Driver {
+    //Buttons
+    static final int TRANS_TOGGLE = 8;
+    static final int ARCADE_TOGGLE = 1;
+
+    //Axis
+    static final int X_AXIS_LEFT = 1;
+    static final int Y_AXIS_LEFT = 2;
+    static final int X_AXIS_RIGHT = 3;
+    static final int Y_AXIS_RIGHT = 4;
+}
+
+//Operator joystick
+class Operator {
+    //Buttons
+    static final int ELEVATOR_STATE_GROUND = 1;
+    static final int ELEVATOR_STATE_ONE = 11;
+    static final int ELEVATOR_STATE_TWO = 12;
+    static final int ELEVATOR_STATE_THREE = 9;
+    static final int ELEVATOR_STATE_FOUR = 10;
+    static final int ELEVATOR_STATE_FIVE = 7;
+    static final int ELEVATOR_STATE_SIX = 8;
+    static final int ELEVATOR_STATE_FEED = 2;
+    static final int ELEVATOR_MANUAL_TOGGLE = 5;
+    static final int GRIPPER_TOGGLE = 3;
+    static final int ELBOW_UP = 6;
+    static final int ELBOW_DOWN = 4;
+    static final int MINIBOT_RELEASE_ONE = 5;
+    static final int MINIBOT_RELEASE_TWO = 6;
+}
+
+class ElbowState {
+    static final int Horizontal = 0;
+    static final int Middle = 1;
+    static final int Vertical = 2;
+}
+
+//Enumeration of autonomous modes
+class AutonomousState {
+    static final int Driving = 0;
+    static final int Turning = 1;
+    static final int Hanging = 2;
+    static final int Release = 3;
+    static final int Done = 4;
+    static final int Sleep = 5;
+}
+
 public class RobotTemplate extends IterativeRobot {
     //Practise robot or competition robot
     static final boolean PRACTISE_ROBOT = true;
@@ -16,8 +64,6 @@ public class RobotTemplate extends IterativeRobot {
     static final double MAX_DRIVE_SPEED = 1.0;
     //Encoder counts per metre travelled
     static final double COUNTS_PER_METRE = 500;
-    //Starting encoder counts
-    static final double ELEVATOR_BASE = 0;
     //Number of elevator encoder counts
     static final int MAX_ELEVATOR_COUNTS = 2400;
     //Number of seconds to wait in teleoperated mode before the minibot is allowed to be deployed
@@ -27,37 +73,45 @@ public class RobotTemplate extends IterativeRobot {
     //Tolerance for the gyro pid
     static final double GYRO_TOLERANCE = 1;
 
-    //Driver joystick
-    class Driver {
-        //Buttons
-        static final int TRANS_TOGGLE = 8;
-        static final int ARCADE_TOGGLE = 2;
+    //A storage class to hold the output of a PIDController
+    public class PIDOutputStorage implements PIDOutput {
+        public void pidWrite(double output) {
+            value = output;
+        }
 
-        //Axis
-        static final int X_AXIS_LEFT = 1;
-        static final int Y_AXIS_LEFT = 2;
-        static final int X_AXIS_RIGHT = 3;
-        static final int Y_AXIS_RIGHT = 4;
-    }
+        public double get() {
+            return value;
+        }
 
-    //Operator joystick
-    class Operator {
-        //Buttons
-        static final int ELEVATOR_STATE_GROUND = 1;
-        static final int ELEVATOR_STATE_ONE = 11;
-        static final int ELEVATOR_STATE_TWO = 12;
-        static final int ELEVATOR_STATE_THREE = 9;
-        static final int ELEVATOR_STATE_FOUR = 10;
-        static final int ELEVATOR_STATE_FIVE = 7;
-        static final int ELEVATOR_STATE_SIX = 8;
-        static final int ELEVATOR_STATE_FEED = 2;
-        static final int ELEVATOR_MANUAL_TOGGLE = 5;
-        static final int GRIPPER_TOGGLE = 3;
-        static final int ELBOW_UP = 6;
-        static final int ELBOW_DOWN = 4;
-        static final int MINIBOT_RELEASE_ONE = 5;
-        static final int MINIBOT_RELEASE_TWO = 6;
-    }
+        double value = 0;
+    };
+
+    //A storage class to hold the output for a speed controller
+    class OutputStorage implements SpeedController, IDeviceController {
+        //Necessary overrides
+        public void disable() {
+        }
+
+        public void set(double val) {
+            value = val;
+        }
+
+        public void set(double val, byte i) {
+            value = val;
+        }
+
+        public void pidWrite() {
+        }
+
+        public void pidWrite(double val) {
+        }
+
+        public double get() {
+            return value;
+        }
+
+        double value = 0;
+    };
 
     //Driver station
     DriverStation ds = DriverStation.getInstance();
@@ -77,50 +131,6 @@ public class RobotTemplate extends IterativeRobot {
     DoubleSolenoid gripper;
     Solenoid minibotVertical;
     Solenoid minibotHorizontal;
-
-    //A storage class to hold the output of a PIDController
-    class PIDOutputStorage implements PIDOutput {
-        //pidWrite override
-        public void pidWrite(double output) {
-            value = output;
-        }
-
-        //Get the value
-        public double get() {
-            return value;
-        }
-
-        //The output of the PID
-        double value = 0;
-    };
-
-    //A storage class to hold the output of a PIDController
-    class OutputStorage implements SpeedController, IDeviceController {
-        public void disable() {
-        }
-
-        public void set(double val) {
-            value = val;
-        }
-
-        public void set(double val, byte i) {
-            value = val;
-        }
-
-        public void pidWrite() {
-        }
-
-        public void pidWrite(double val) {
-        }
-
-        //Get the value
-        public double get() {
-            return value;
-        }
-
-        //The output of the PID
-        double value = 0;
-    };
 
     //Gyro
     Gyro gyro = new Gyro(1);
@@ -153,40 +163,27 @@ public class RobotTemplate extends IterativeRobot {
     PIDController pidLeft = new PIDController(0.0, 0.0005, 0.0, encLeft, jagLeft, 0.005);
     PIDController pidRight = new PIDController(0.0, 0.0005, 0.0, encRight, jagRight, 0.005);
 
-    //Toggle for manual or automated elevator control
-    //Default -- automated
+    //Toggle for manual or automated elevator control Default -- automated
     Toggle manualElevatorToggle = new Toggle(false);
-
-    //Toggle for the transmission shifter button
-    //Default -- low gear
+    //Toggle for the transmission shifter button Default -- low gear
     Toggle transToggle = new Toggle(false);
-
-    //Toggle for the gripper button
-    //Default -- gripper is closed
+    //Toggle for the gripper button Default -- gripper is closed
     Toggle gripperToggle = new Toggle(false);
-
-    //Toggle for arcade/tank drive
-    //Default is tank drive
+    //Toggle for arcade/tank drive Default is tank drive
     Toggle arcadeToggle = new Toggle(false);
 
     //Enumeration of setpoints for different heights of the elevator
     class ElevatorSetpoint {
-        static final double ground = ELEVATOR_BASE;
-        static final double posOne = ELEVATOR_BASE + MAX_ELEVATOR_COUNTS * 1.0 / 6.0;
-        static final double posTwo = ELEVATOR_BASE + MAX_ELEVATOR_COUNTS * 2.0 / 6.0;
-        static final double posThree = ELEVATOR_BASE + MAX_ELEVATOR_COUNTS * 3.0 / 6.0;
-        static final double posFour = ELEVATOR_BASE + MAX_ELEVATOR_COUNTS * 4.0 / 6.0;
-        static final double posFive = ELEVATOR_BASE + MAX_ELEVATOR_COUNTS * 5.0 / 6.0;
-        static final double posSix = ELEVATOR_BASE + MAX_ELEVATOR_COUNTS;
-        static final double feed = ELEVATOR_BASE;
+        static final double ground = 0;
+        static final double posOne = MAX_ELEVATOR_COUNTS * 1.0 / 6.0;
+        static final double posTwo = MAX_ELEVATOR_COUNTS * 2.0 / 6.0;
+        static final double posThree = MAX_ELEVATOR_COUNTS * 3.0 / 6.0;
+        static final double posFour = MAX_ELEVATOR_COUNTS * 4.0 / 6.0;
+        static final double posFive = MAX_ELEVATOR_COUNTS * 5.0 / 6.0;
+        static final double posSix = MAX_ELEVATOR_COUNTS;
+        static final double feed = 0;
     }
 
-    class ElbowState {
-        static final int Horizontal = 0;
-        static final int Middle = 1;
-        static final int Vertical = 2;
-    }
-    
     class ButtonPress {
         boolean value = false;
         boolean lastValue = false;
@@ -310,7 +307,7 @@ public class RobotTemplate extends IterativeRobot {
     public void setElbow(int state) {
         elbowState = state;
         elbowOne.set(elbowState != ElbowState.Horizontal ? DoubleSolenoid.Value.kForward : DoubleSolenoid.Value.kReverse);
-        elbowTwo.set(elbowState > ElbowState.Middle ? DoubleSolenoid.Value.kForward : DoubleSolenoid.Value.kReverse);
+        elbowTwo.set(elbowState == ElbowState.Vertical ? DoubleSolenoid.Value.kForward : DoubleSolenoid.Value.kReverse);
         if(elbowState == ElbowState.Vertical)
             gripper.set(DoubleSolenoid.Value.kForward);
     }
@@ -331,16 +328,6 @@ public class RobotTemplate extends IterativeRobot {
 
     //Runs continuously during disabled period
     public void disabledContinuous() {
-    }
-    
-        //Enumeration of autonomous modes
-    class AutonomousState {
-        static final int Driving = 0;
-        static final int Turning = 1;
-        static final int Hanging = 2;
-        static final int Release = 3;
-        static final int Done = 4;
-        static final int Sleep = 5;
     }
 
     //Class that defines the current step in autonomous mode
@@ -378,10 +365,8 @@ public class RobotTemplate extends IterativeRobot {
     boolean heightOne;
     boolean heightTwo;
     boolean heightThree;
+    boolean staggeredPeg;
     boolean releaseTube;
-    boolean hangLeft;
-    boolean hangMiddle;
-    boolean hangRight;
     double startPosition;
 
     Step posOne[] = {
@@ -431,10 +416,8 @@ public class RobotTemplate extends IterativeRobot {
         heightOne = ds.getDigitalIn(2);
         heightTwo = ds.getDigitalIn(3);
         heightThree = ds.getDigitalIn(4);
-        releaseTube = ds.getDigitalIn(5);
-        hangLeft = ds.getDigitalIn(6);
-        hangMiddle = ds.getDigitalIn(7);
-        hangRight = ds.getDigitalIn(8);
+        staggeredPeg = ds.getDigitalIn(5);
+        releaseTube = ds.getDigitalIn(6);
         startPosition = ds.getAnalogIn(1);
 
         //Minibot defaults to up
@@ -468,39 +451,23 @@ public class RobotTemplate extends IterativeRobot {
 
         setElbow(ElbowState.Vertical);
 
-        //Round the analog input
-        int position = 0;
-        if(startPosition - Math.floor(startPosition) < 0.5)
-            position = (int)Math.floor(startPosition);
-        else
-            position = (int)Math.ceil(startPosition);
-
-        stepList = (position == 0) ? posOne : stepList;
-        stepList = (position == 1) ? posTwo : stepList;
-        stepList = (position == 2) ? posThree : stepList;
-        stepList = (position == 3) ? posFour : stepList;
-        stepList = (position == 4) ? posFive : stepList;
-        stepList = (position == 5) ? posSix : stepList;
-
         if(doNothing) {
             stepList = new Step[] {
-                new Step(AutonomousState.Done, 0),
+                new Step(AutonomousState.Done),
             };
         }
-
-        boolean offset = (position == 1 || position == 4);
 
         //Determine the setpoint of the elevator
         elevatorSetpoint = ElevatorSetpoint.ground;
 
-        elevatorSetpoint = (heightOne && !offset) ? ElevatorSetpoint.posOne : elevatorSetpoint;
-        elevatorSetpoint = (heightOne && offset) ? ElevatorSetpoint.posTwo : elevatorSetpoint;
+        elevatorSetpoint = (heightOne && !staggeredPeg) ? ElevatorSetpoint.posOne : elevatorSetpoint;
+        elevatorSetpoint = (heightOne && staggeredPeg) ? ElevatorSetpoint.posTwo : elevatorSetpoint;
 
-        elevatorSetpoint = (heightTwo && !offset) ? ElevatorSetpoint.posThree : elevatorSetpoint;
-        elevatorSetpoint = (heightTwo && offset) ? ElevatorSetpoint.posFour : elevatorSetpoint;
+        elevatorSetpoint = (heightTwo && !staggeredPeg) ? ElevatorSetpoint.posThree : elevatorSetpoint;
+        elevatorSetpoint = (heightTwo && staggeredPeg) ? ElevatorSetpoint.posFour : elevatorSetpoint;
 
-        elevatorSetpoint = (heightThree && !offset) ? ElevatorSetpoint.posFive : elevatorSetpoint;
-        elevatorSetpoint = (heightThree && offset) ? ElevatorSetpoint.posSix : elevatorSetpoint;
+        elevatorSetpoint = (heightThree && !staggeredPeg) ? ElevatorSetpoint.posFive : elevatorSetpoint;
+        elevatorSetpoint = (heightThree && staggeredPeg) ? ElevatorSetpoint.posSix : elevatorSetpoint;
     }
 
     //Runs periodically during autonomous period
@@ -557,8 +524,11 @@ public class RobotTemplate extends IterativeRobot {
                         //If the gyro is below or above the target angle depending on the direction we are turning
                         if(Math.abs(delta) < GYRO_TOLERANCE)
                             ++gyroCounter;
-                        if(gyroCounter >= 10)
+                        if(gyroCounter >= 10) {
                             ++stepIndex;
+                            pidLeft.enable();
+                            pidRight.enable();
+                        }
                     } else {
                         final double delta = currentStep.get() - gyro.getAngle();
                         if(Math.abs(delta) < GYRO_TOLERANCE)
@@ -588,6 +558,8 @@ public class RobotTemplate extends IterativeRobot {
                     break;
                 //If we are done our autonomous mode
                 case AutonomousState.Done:
+                    pidLeft.disable();
+                    pidRight.disable();
                     break;
                 //Sleep state
                 case AutonomousState.Sleep:
@@ -613,9 +585,6 @@ public class RobotTemplate extends IterativeRobot {
             encRight.reset();
             gyro.reset();
             vicElevator.set(0.0);
-            //Enable PIDs
-            pidLeft.enable();
-            pidRight.enable();
             //Stop
             pidLeft.setSetpoint(0.0);
             pidRight.setSetpoint(0.0);
@@ -671,11 +640,6 @@ public class RobotTemplate extends IterativeRobot {
         //Manual or automated elevator control
         if(manualElevatorToggle.get()) {
             double axis = -stickOperator.getAxis(Joystick.AxisType.kY);
-            //If we are below 0 then dont allow the elevator to go down
-            /*if(encElevator.pidGet() <= 0)
-                axis = Math.max(0, axis);
-            if(encElevator.pidGet() >= MAX_ELEVATOR_COUNTS)
-                axis = Math.min(0, axis);*/
             vicElevator.set(axis);
         } else {
             elevatorPID();
@@ -731,13 +695,12 @@ public class RobotTemplate extends IterativeRobot {
                 pidRight.enable();
             }
 
-            //Move axis is first y-axis and rotate axis is second x-axis
             //Let the robotdrive class calculate arcade drive for us
             robotDrive.arcadeDrive(stickDriver, Driver.Y_AXIS_LEFT, stickDriver, Driver.X_AXIS_RIGHT);
             pidLeft.setSetpoint(storageLeft.get() * maxEncoderRate);
             pidRight.setSetpoint(storageRight.get() * maxEncoderRate);
         }
-        else if (!arcadeToggle.get()) {
+        else if(!arcadeToggle.get()) {
             //If PID is disabled
             if(!pidLeft.isEnable() || !pidRight.isEnable()) {
                 //Enable PID
