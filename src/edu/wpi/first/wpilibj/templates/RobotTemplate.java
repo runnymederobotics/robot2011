@@ -1,7 +1,6 @@
 package edu.wpi.first.wpilibj.templates;
 
 import edu.wpi.first.wpilibj.*;
-import edu.wpi.first.wpilibj.parsing.IDeviceController;
 
 //Driver joystick
 class Driver {
@@ -71,47 +70,7 @@ public class RobotTemplate extends IterativeRobot {
     //Number of seconds after the minibot drops before we send it out horizontally
     static final double MINIBOT_HORIZONTAL_DELAY = 2.0;
     //Tolerance for the gyro pid
-    static final double GYRO_TOLERANCE = 1;
-
-    //A storage class to hold the output of a PIDController
-    public class PIDOutputStorage implements PIDOutput {
-        public void pidWrite(double output) {
-            value = output;
-        }
-
-        public double get() {
-            return value;
-        }
-
-        double value = 0;
-    };
-
-    //A storage class to hold the output for a speed controller
-    class OutputStorage implements SpeedController, IDeviceController {
-        //Necessary overrides
-        public void disable() {
-        }
-
-        public void set(double val) {
-            value = val;
-        }
-
-        public void set(double val, byte i) {
-            value = val;
-        }
-
-        public void pidWrite() {
-        }
-
-        public void pidWrite(double val) {
-        }
-
-        public double get() {
-            return value;
-        }
-
-        double value = 0;
-    };
+    static final double GYRO_TOLERANCE = 1.0;
 
     //Driver station
     DriverStation ds = DriverStation.getInstance();
@@ -135,7 +94,6 @@ public class RobotTemplate extends IterativeRobot {
     //Gyro
     Gyro gyro = new Gyro(1);
     PIDOutputStorage gyroOutput = new PIDOutputStorage();
-    PIDController pidGyro = new PIDController(0.0005, 0.0005, 0.0, gyro, gyroOutput, 0.005);
 
     //Jaguars
     Jaguar jagLeft = new Jaguar(1);
@@ -162,6 +120,7 @@ public class RobotTemplate extends IterativeRobot {
     //PIDs
     PIDController pidLeft = new PIDController(0.0, 0.0005, 0.0, encLeft, jagLeft, 0.005);
     PIDController pidRight = new PIDController(0.0, 0.0005, 0.0, encRight, jagRight, 0.005);
+    PIDController pidGyro = new PIDController(0.0005, 0.0005, 0.0, gyro, gyroOutput, 0.005);
 
     //Toggle for manual or automated elevator control Default -- automated
     Toggle manualElevatorToggle = new Toggle(false);
@@ -182,23 +141,6 @@ public class RobotTemplate extends IterativeRobot {
         static final double posFive = MAX_ELEVATOR_COUNTS * 5.0 / 6.0;
         static final double posSix = MAX_ELEVATOR_COUNTS;
         static final double feed = 0;
-    }
-
-    class ButtonPress {
-        boolean value = false;
-        boolean lastValue = false;
-
-        public void feed(boolean val) {
-            if(!lastValue && val)
-                value = true;
-            else
-                value = false;
-            lastValue = val;
-        }
-
-        public boolean get() {
-            return value;
-        }
     }
 
     //State of elbow
@@ -249,68 +191,6 @@ public class RobotTemplate extends IterativeRobot {
             gripper = new DoubleSolenoid(7, 8);
         }
     }
-    
-    //Used in teleopPeriodic to print only once a second
-    double lastPrintTime = 0;
-
-    //Print function for our variables
-    public void print(String mode) {
-        //Current time
-        final double curPrintTime = Timer.getFPGATimestamp();
-        //If it has been more than half a second
-        if(curPrintTime - lastPrintTime > 0.5) {
-            //Print statements
-            System.out.println("[" + mode + "]");
-            System.out.println("DS DI 1: " + ds.getDigitalIn(1) + " DS AI 1: " + ds.getAnalogIn(1));
-            System.out.println("renc count: " + encRight.encoder.get() + " lenc count: " + encLeft.encoder.get() + " elevator counts: " + encElevator.pidGet());
-            System.out.println("rencRate: " + encRight.pidGet() + " lencRate: " + encLeft.pidGet());
-            System.out.println("rSet: " + pidRight.getSetpoint() + " lSet: " + pidLeft.getSetpoint() + " eSet: " + elevatorSetpoint);
-            System.out.println("rPID: " + pidRight.get() + " lPID: " + pidLeft.get());
-            System.out.println("manualElevator: " + manualElevatorToggle.get());
-            System.out.println("elevAxis: " + stickOperator.getAxis(Joystick.AxisType.kY) + " leftAxis: " + stickDriver.getRawAxis(Driver.Y_AXIS_LEFT) + " rightAxis: " + stickDriver.getRawAxis(Driver.Y_AXIS_RIGHT));
-            System.out.println("Gyro PIDget: " + gyro.pidGet() + " gyro output storage: " + gyroOutput.get());
-            System.out.println("jagLeft: " + jagLeft.get() + " jagRight: " + jagRight.get());
-            System.out.println("elbow input: " + stickOperator.getThrottle());
-            //System.out.println("Raven gyro min: " + gyro.min + " max: " + gyro.max + " deadzone: " + gyro.deadzone + " center: " + gyro.center);
-            System.out.println();
-
-            //Update the last print time
-            lastPrintTime = curPrintTime;
-        }
-    }
-
-    //Returns whether or not the setpoint has been reached
-    public boolean elevatorPID() {
-        //Difference between setpoint and our position
-        final double error = elevatorSetpoint - encElevator.pidGet();
-
-        //We can be off by 5%
-        final double toleranceWhileGoingUp = MAX_ELEVATOR_COUNTS * 0.05;
-        final double toleranceWhileGoingDown = -MAX_ELEVATOR_COUNTS * 0.05;
-
-        //Different speeds going up/down
-        final double speedWhileGoingUp = 1.0;
-        final double speedWhileGoingDown = -0.7;
-
-        //Go up when below setpoint, down when above setpoint
-        if(error > 0 && error > toleranceWhileGoingUp)
-            vicElevator.set(speedWhileGoingUp);
-        else if(error < 0 && error < toleranceWhileGoingDown)
-            vicElevator.set(speedWhileGoingDown);
-        else {
-            vicElevator.set(0.0);
-            return true;
-        }
-        return false;
-    }
-
-    public void setElbow(int state) {
-        elbowState = state;
-        elbowOne.set(elbowState != ElbowState.Horizontal ? DoubleSolenoid.Value.kForward : DoubleSolenoid.Value.kReverse);
-        elbowTwo.set(elbowState == ElbowState.Vertical ? DoubleSolenoid.Value.kForward : DoubleSolenoid.Value.kReverse);
-        if(elbowState == ElbowState.Vertical)
-            gripper.set(DoubleSolenoid.Value.kForward);
-    }
 
     //Runs at the beginning of disabled period
     public void disabledInit() {
@@ -328,30 +208,6 @@ public class RobotTemplate extends IterativeRobot {
 
     //Runs continuously during disabled period
     public void disabledContinuous() {
-    }
-
-    //Class that defines the current step in autonomous mode
-    class Step {
-        //Constructors for Step
-        public Step(int Type) {
-            type = Type;
-        }
-
-        public Step(int Type, double Val) {
-            type = Type;
-            value = Val;
-        }
-
-        //The type of step
-        public int type = AutonomousState.Done;
-
-        //Get the value
-        public double get() {
-            return value;
-        }
-
-        //The amount we want to move by in the step (units depend on the type of step)
-        double value = 0.0;
     }
 
     //Array to hold steps -- changed depending on which autonomous mode we want
@@ -530,6 +386,7 @@ public class RobotTemplate extends IterativeRobot {
                             pidRight.enable();
                         }
                     } else {
+                        //Use our own calculations to get to the setpoint of the gyro
                         final double delta = currentStep.get() - gyro.getAngle();
                         if(Math.abs(delta) < GYRO_TOLERANCE)
                             ++gyroCounter;
@@ -543,10 +400,6 @@ public class RobotTemplate extends IterativeRobot {
                             jagRight.set(0.5);
                         }
                     }
-                    break;
-                //Elevator step
-                case AutonomousState.Hanging:
-                    ++stepIndex;
                     break;
                 //To release the tube
                 case AutonomousState.Release:
@@ -639,8 +492,7 @@ public class RobotTemplate extends IterativeRobot {
         manualElevatorToggle.feed(stickOperator.getRawButton(Operator.ELEVATOR_MANUAL_TOGGLE));
         //Manual or automated elevator control
         if(manualElevatorToggle.get()) {
-            double axis = -stickOperator.getAxis(Joystick.AxisType.kY);
-            vicElevator.set(axis);
+            vicElevator.set(-stickOperator.getAxis(Joystick.AxisType.kY));
         } else {
             elevatorPID();
         }
@@ -742,6 +594,69 @@ public class RobotTemplate extends IterativeRobot {
                     //minibotHorizontal.set(true);
                 }
             }
+        }
+    }
+
+    //Returns whether or not the setpoint has been reached
+    public boolean elevatorPID() {
+        //Difference between setpoint and our position
+        final double error = elevatorSetpoint - encElevator.pidGet();
+
+        //We can be off by 5%
+        final double toleranceWhileGoingUp = MAX_ELEVATOR_COUNTS * 0.05;
+        final double toleranceWhileGoingDown = -MAX_ELEVATOR_COUNTS * 0.05;
+
+        //Different speeds going up/down
+        final double speedWhileGoingUp = 1.0;
+        final double speedWhileGoingDown = -0.7;
+
+        //Go up when below setpoint, down when above setpoint
+        if(error > 0 && error > toleranceWhileGoingUp)
+            vicElevator.set(speedWhileGoingUp);
+        else if(error < 0 && error < toleranceWhileGoingDown)
+            vicElevator.set(speedWhileGoingDown);
+        else {
+            vicElevator.set(0.0);
+            return true;
+        }
+        return false;
+    }
+
+    public void setElbow(int state) {
+        elbowState = state;
+        elbowOne.set(elbowState != ElbowState.Horizontal ? DoubleSolenoid.Value.kForward : DoubleSolenoid.Value.kReverse);
+        elbowTwo.set(elbowState == ElbowState.Vertical ? DoubleSolenoid.Value.kForward : DoubleSolenoid.Value.kReverse);
+        if(elbowState == ElbowState.Vertical)
+            gripper.set(DoubleSolenoid.Value.kForward);
+    }
+    
+    double lastPrintTime = 0;
+
+    //Print function for our variables
+    public void print(String mode) {
+        //Current time
+        final double curPrintTime = Timer.getFPGATimestamp();
+        //If it has been more than half a second
+        if(curPrintTime - lastPrintTime > 0.5) {
+            //Make a bunch of newlines to clear the screen to only show the current output
+            System.out.println("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
+            //Print statements
+            System.out.println("[" + mode + "]");
+            System.out.println("DS DI 1: " + ds.getDigitalIn(1) + " DS AI 1: " + ds.getAnalogIn(1));
+            System.out.println("renc count: " + encRight.encoder.get() + " lenc count: " + encLeft.encoder.get() + " elevator counts: " + encElevator.pidGet());
+            System.out.println("rencRate: " + encRight.pidGet() + " lencRate: " + encLeft.pidGet());
+            System.out.println("rSet: " + pidRight.getSetpoint() + " lSet: " + pidLeft.getSetpoint() + " eSet: " + elevatorSetpoint);
+            System.out.println("rPID: " + pidRight.get() + " lPID: " + pidLeft.get());
+            System.out.println("manualElevator: " + manualElevatorToggle.get());
+            System.out.println("elevAxis: " + stickOperator.getAxis(Joystick.AxisType.kY) + " leftAxis: " + stickDriver.getRawAxis(Driver.Y_AXIS_LEFT) + " rightAxis: " + stickDriver.getRawAxis(Driver.Y_AXIS_RIGHT));
+            System.out.println("Gyro PIDget: " + gyro.pidGet() + " gyro output storage: " + gyroOutput.get());
+            System.out.println("jagLeft: " + jagLeft.get() + " jagRight: " + jagRight.get());
+            System.out.println("elbow input: " + stickOperator.getThrottle());
+            //System.out.println("Raven gyro min: " + gyro.min + " max: " + gyro.max + " deadzone: " + gyro.deadzone + " center: " + gyro.center);
+            System.out.println();
+
+            //Update the last print time
+            lastPrintTime = curPrintTime;
         }
     }
 }
