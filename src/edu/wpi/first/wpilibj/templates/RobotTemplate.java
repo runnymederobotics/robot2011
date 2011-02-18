@@ -8,7 +8,7 @@ class Driver {
     static final int TRANS_TOGGLE = 8;
     static final int ARCADE_TOGGLE = 1;
 
-    //Axis
+    //Axes
     static final int X_AXIS_LEFT = 1;
     static final int Y_AXIS_LEFT = 2;
     static final int X_AXIS_RIGHT = 3;
@@ -58,7 +58,8 @@ public class RobotTemplate extends IterativeRobot {
     //Encoder rate at max speed in fast gear
     static final double FAST_MAX_ENCODER_RATE = 1700.0;
     //Speed to set the elevator motor to
-    static final double ELEVATOR_SPEED = 0.8;
+    static final double ELEVATOR_SPEED_UP = 1.0;
+    static final double ELEVATOR_SPEED_DOWN = -0.7;
     //Max drive motor speed
     static final double MAX_DRIVE_SPEED = 1.0;
     //Encoder counts per metre travelled
@@ -68,7 +69,7 @@ public class RobotTemplate extends IterativeRobot {
     //Number of seconds to wait in teleoperated mode before the minibot is allowed to be deployed
     static final double MINIBOT_RELEASE_TIME = 110.0;
     //Number of seconds after the minibot drops before we send it out horizontally
-    static final double MINIBOT_HORIZONTAL_DELAY = 2.0;
+    static final double MINIBOT_HORIZONTAL_DELAY = 0.5;
     //Tolerance for the gyro pid
     static final double GYRO_TOLERANCE = 1.0;
 
@@ -82,14 +83,15 @@ public class RobotTemplate extends IterativeRobot {
     //Compressor, switch is DI 10, spike is relay 1
     Compressor compressor = new Compressor(10, 1);
 
-    //Relays
-    Solenoid transShiftSingle;
-    DoubleSolenoid transShiftDouble;
-    DoubleSolenoid elbowOne;
-    DoubleSolenoid elbowTwo;
-    DoubleSolenoid gripper;
-    Solenoid minibotVertical;
-    Solenoid minibotHorizontal;
+    //Solenoids for main robot or practise robot
+    Pneumatic transShift;
+    Pneumatic elbowTop;
+    Pneumatic elbowBottom;
+    Pneumatic gripper;
+    Pneumatic minibotHorizontal;
+
+    //Vertical is always a double solenoid
+    DoubleSolenoid minibotVertical;
 
     //Gyro
     Gyro gyro = new Gyro(1);
@@ -177,19 +179,23 @@ public class RobotTemplate extends IterativeRobot {
         //Start the compressor
         compressor.start();
 
-        //Initialize our transmissions based on if we are using the practise robot or the real robot
+        //Initialize our pneumatics if we are using the practise robot or the real robot
         if(!PRACTISE_ROBOT) {
-            transShiftSingle = new Solenoid(1);
-            elbowOne = new DoubleSolenoid(6, 7);
-            elbowTwo = new DoubleSolenoid(4, 5);
-            gripper = new DoubleSolenoid(2, 3);
+            transShift = new Pneumatic(new Solenoid(1));
+            elbowTop = new Pneumatic(new Solenoid(2));
+            elbowBottom = new Pneumatic(new Solenoid(3));
+            gripper = new Pneumatic(new Solenoid(4));
+            minibotHorizontal = new Pneumatic(new Solenoid(5));
         }
         else {
-            transShiftDouble = new DoubleSolenoid(1, 2);
-            elbowOne = new DoubleSolenoid(3, 4);
-            elbowTwo = new DoubleSolenoid(5, 6);
-            gripper = new DoubleSolenoid(7, 8);
+            transShift = new Pneumatic(new Relay(5));
+            elbowTop = new Pneumatic(new DoubleSolenoid(3, 4));
+            elbowBottom = new Pneumatic(new DoubleSolenoid(5, 6));
+            gripper = new Pneumatic(new DoubleSolenoid(1, 2));
+            minibotHorizontal = new Pneumatic(new Relay(7));
         }
+
+        minibotVertical = new DoubleSolenoid(7, 8);
     }
 
     //Runs at the beginning of disabled period
@@ -211,7 +217,7 @@ public class RobotTemplate extends IterativeRobot {
         new Step(AutonomousState.Hanging),
         new Step(AutonomousState.Driving, 1),
         new Step(AutonomousState.Release),
-        new Step(AutonomousState.Done, 0),
+        new Step(AutonomousState.Done),
     };
 
     //Iterates through each step
@@ -239,15 +245,11 @@ public class RobotTemplate extends IterativeRobot {
         startPosition = ds.getAnalogIn(1);
 
         //Minibot defaults to up
-        //minibotVertical.set(DoubleSolenoid.Value.kReverse);
-        //minibotVertical.set(false);
-        //minibotHorizontal.set(false);
+        minibotHorizontal.set(false);
+        minibotVertical.set(DoubleSolenoid.Value.kReverse);
 
         //Default to slow driving mode
-        if(!PRACTISE_ROBOT)
-            transShiftSingle.set(false);
-        else if(transShiftDouble != null)
-            transShiftDouble.set(DoubleSolenoid.Value.kReverse);
+        transShift.set(false);
 
         //Reset gyro and enable PID on gyro
         pidGyro.enable();
@@ -365,7 +367,7 @@ public class RobotTemplate extends IterativeRobot {
                 case AutonomousState.Release:
                     if(releaseTube) {
                         setElbow(ElbowState.Horizontal);
-                        gripper.set(DoubleSolenoid.Value.kReverse);
+                        gripper.set(false);
                         //Toggle the gripper to be open at the beginning of teleop
                         gripperToggle.feed(true);
                     }
@@ -423,9 +425,8 @@ public class RobotTemplate extends IterativeRobot {
         releaseMinibot = false;
 
         //Minibot defaults to up
-        //minibotVertical.set(DoubleSolenoid.Value.kReverse);
-        //minibotVertical.set(false);
-        //minibotHorizontal.set(false);
+        minibotHorizontal.set(false);
+        minibotVertical.set(DoubleSolenoid.Value.kReverse);
     }
 
     //Runs periodically during teleoperated period
@@ -462,10 +463,7 @@ public class RobotTemplate extends IterativeRobot {
         //Feed the toggle on the transmission shifter button
         transToggle.feed(stickDriver.getRawButton(Driver.TRANS_TOGGLE));
         //Set the transmission shifter to open or closed based on the state of the toggle
-        if(!PRACTISE_ROBOT)
-            transShiftSingle.set(transToggle.get());
-        else if(transShiftDouble != null)
-            transShiftDouble.set(transToggle.get() ? DoubleSolenoid.Value.kForward : DoubleSolenoid.Value.kReverse);
+        transShift.set(transToggle.get());
 
         //Determine the input range to use (max encoder rate) to use depending on the transmission state we are in
         double maxEncoderRate = transToggle.get() ? FAST_MAX_ENCODER_RATE : SLOW_MAX_ENCODER_RATE;
@@ -476,7 +474,7 @@ public class RobotTemplate extends IterativeRobot {
         gripperToggle.feed(stickOperator.getRawButton(Operator.GRIPPER_TOGGLE));
         //Set the gripper to open or closed based on the state of the toggle
         if(elbowState != ElbowState.Vertical)
-            gripper.set(gripperToggle.get() ? DoubleSolenoid.Value.kForward : DoubleSolenoid.Value.kReverse);
+            gripper.set(gripperToggle.get());
 
         //Feed the buttons
         elbowUp.feed(stickOperator.getRawButton(Operator.ELBOW_UP));
@@ -502,7 +500,7 @@ public class RobotTemplate extends IterativeRobot {
 
         //Drive arcade or tank based on the state of the toggle
         if(arcadeToggle.get()) {
-            //If PID is enabled
+            //If PID is disabled
             if(!pidLeft.isEnable() || !pidRight.isEnable()) {
                 //Enable PID
                 pidLeft.enable();
@@ -545,15 +543,14 @@ public class RobotTemplate extends IterativeRobot {
             //If we want to release
             if(releaseMinibot) {
                 //Set the vertical relay to released
-                //minibotVertical.set(DoubleSolenoid.Value.kForward);
-                //minibotVertical.set(true);
+                minibotVertical.set(DoubleSolenoid.Value.kForward);
                 //If the release time is 0 (we haven't set the release time yet) then set the release time
                 //Allows us to set the release time only once
                 minibotReleaseTime = minibotReleaseTime == 0.0 ? Timer.getFPGATimestamp() : minibotReleaseTime;
                 //If it's been at least 2 seconds since the release was triggered
                 if(Timer.getFPGATimestamp() - minibotReleaseTime >= MINIBOT_HORIZONTAL_DELAY) {
                     //Set the horizontal relay to released
-                    //minibotHorizontal.set(true);
+                    minibotHorizontal.set(true);
                 }
             }
         }
@@ -568,15 +565,11 @@ public class RobotTemplate extends IterativeRobot {
         final double toleranceWhileGoingUp = MAX_ELEVATOR_COUNTS * 0.05;
         final double toleranceWhileGoingDown = -MAX_ELEVATOR_COUNTS * 0.05;
 
-        //Different speeds going up/down
-        final double speedWhileGoingUp = 1.0;
-        final double speedWhileGoingDown = -0.7;
-
         //Go up when below setpoint, down when above setpoint
         if(error > 0 && error > toleranceWhileGoingUp)
-            vicElevator.set(speedWhileGoingUp);
+            vicElevator.set(ELEVATOR_SPEED_UP);
         else if(error < 0 && error < toleranceWhileGoingDown)
-            vicElevator.set(speedWhileGoingDown);
+            vicElevator.set(ELEVATOR_SPEED_DOWN);
         else {
             vicElevator.set(0.0);
             return true;
@@ -586,10 +579,10 @@ public class RobotTemplate extends IterativeRobot {
 
     public void setElbow(int state) {
         elbowState = state;
-        elbowOne.set(elbowState != ElbowState.Horizontal ? DoubleSolenoid.Value.kForward : DoubleSolenoid.Value.kReverse);
-        elbowTwo.set(elbowState == ElbowState.Vertical ? DoubleSolenoid.Value.kForward : DoubleSolenoid.Value.kReverse);
+        elbowTop.set(elbowState == ElbowState.Vertical);
+        elbowBottom.set(elbowState != ElbowState.Horizontal);
         if(elbowState == ElbowState.Vertical)
-            gripper.set(DoubleSolenoid.Value.kForward);
+            gripper.set(true);
     }
     
     double lastPrintTime = 0;
@@ -601,7 +594,7 @@ public class RobotTemplate extends IterativeRobot {
         //If it has been more than half a second
         if(curPrintTime - lastPrintTime > 0.5) {
             //Make a bunch of newlines to clear the screen to only show the current output
-            System.out.println("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
+            System.out.println("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
             //Print statements
             System.out.println("[" + mode + "]");
             System.out.println("DS DI 1: " + ds.getDigitalIn(1) + " DS AI 1: " + ds.getAnalogIn(1));
@@ -613,9 +606,8 @@ public class RobotTemplate extends IterativeRobot {
             System.out.println("elevAxis: " + stickOperator.getAxis(Joystick.AxisType.kY) + " leftAxis: " + stickDriver.getRawAxis(Driver.Y_AXIS_LEFT) + " rightAxis: " + stickDriver.getRawAxis(Driver.Y_AXIS_RIGHT));
             System.out.println("Gyro PIDget: " + gyro.pidGet() + " gyro output storage: " + gyroOutput.get());
             System.out.println("jagLeft: " + jagLeft.get() + " jagRight: " + jagRight.get());
-            System.out.println("elbow input: " + stickOperator.getThrottle());
+            System.out.println("elbow input: " + stickOperator.getThrottle() + "elbowState: " + elbowState);
             //System.out.println("Raven gyro min: " + gyro.min + " max: " + gyro.max + " deadzone: " + gyro.deadzone + " center: " + gyro.center);
-            System.out.println();
 
             //Update the last print time
             lastPrintTime = curPrintTime;
