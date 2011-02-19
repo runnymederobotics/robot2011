@@ -27,4 +27,8 @@ public class Toggle {
     public boolean get() {
         return value;
     }
+
+    public void set(boolean val) {
+        value = val;
+    }
 }

@@ -52,7 +52,7 @@ class AutonomousState {
 
 public class RobotTemplate extends IterativeRobot {
     //Practise robot or competition robot
-    static final boolean PRACTISE_ROBOT = true;
+    static final boolean PRACTISE_ROBOT = false;
     //Encoder rate at max speed in slow gear
     static final double SLOW_MAX_ENCODER_RATE = 750.0;
     //Encoder rate at max speed in fast gear
@@ -72,6 +72,10 @@ public class RobotTemplate extends IterativeRobot {
     static final double MINIBOT_HORIZONTAL_DELAY = 0.5;
     //Tolerance for the gyro pid
     static final double GYRO_TOLERANCE = 1.0;
+    //Delay between
+    static final double AUTONOMOUS_RELEASE_DELAY = 1.5;
+    //Print delay
+    static final double PRINT_DELAY = 0.5;
 
     //Driver station
     DriverStation ds = DriverStation.getInstance();
@@ -108,30 +112,40 @@ public class RobotTemplate extends IterativeRobot {
     //DI 3 doesn't work
 
     //Victors
-    Victor vicElevator = new Victor(4);
+    Victor vicElevator = new Victor(3);
 
     //Encoders
-    PIDEncoder encLeft = new PIDEncoder(true, 5, 6, true);
-    Encoder encNull = new Encoder(3, 4);
-    PIDEncoder encElevator = new PIDEncoder(false, 7, 8);
-    PIDEncoder encRight = new PIDEncoder(true, 1, 2, true);
+    PIDEncoder encLeft;
+    Encoder encNull;
+    PIDEncoder encElevator;
+    PIDEncoder encRight;
+
+    DigitalInput rightSensor = new DigitalInput(11);
+    DigitalInput middleSensor = new DigitalInput(12);
+    DigitalInput leftSensor = new DigitalInput(13);
 
     //Provides drive functions (arcade and tank drive)
     RobotDrive robotDrive = new RobotDrive(storageLeft, storageRight);
 
     //PIDs
-    PIDController pidLeft = new PIDController(0.0, 0.0005, 0.0, encLeft, jagLeft, 0.005);
-    PIDController pidRight = new PIDController(0.0, 0.0005, 0.0, encRight, jagRight, 0.005);
-    PIDController pidGyro = new PIDController(0.0005, 0.0005, 0.0, gyro, gyroOutput, 0.005);
+    PIDController pidLeft;
+    PIDController pidRight;
+    PIDController pidGyro;
 
     //Toggle for manual or automated elevator control
-    Toggle manualElevatorToggle = new Toggle(false); //Automated elevator
+    Toggle manualElevatorToggle = new Toggle(true); //Automated elevator
     //Toggle for the transmission shifter
     Toggle transToggle = new Toggle(false); //Low gear
     //Toggle for the gripper
-    Toggle gripperToggle = new Toggle(true); //Gripper closed
+    Toggle gripperToggle = new Toggle(false); //Gripper closed
     //Toggle for arcade/tank drive
     Toggle arcadeToggle = new Toggle(false); //Tank drive
+    
+    //State of elbow
+    int elbowState;
+
+    ButtonPress elbowUp = new ButtonPress();
+    ButtonPress elbowDown = new ButtonPress();
 
     //Enumeration of setpoints for different heights of the elevator
     class ElevatorSetpoint {
@@ -145,17 +159,46 @@ public class RobotTemplate extends IterativeRobot {
         static final double feed = 0;
     }
 
-    //State of elbow
-    int elbowState;
-
-    ButtonPress elbowUp = new ButtonPress();
-    ButtonPress elbowDown = new ButtonPress();
-
     //The elevator setpoint, determined by which button on the operator joystick is pressed
     double elevatorSetpoint = ElevatorSetpoint.ground;
 
     //Runs when the robot is turned
     public void robotInit() {
+        if(!PRACTISE_ROBOT) {
+            encLeft = new PIDEncoder(true, 3, 4, true);
+            encNull = new Encoder(7, 8);
+            encElevator = new PIDEncoder(false, 5, 6, true);
+            encRight = new PIDEncoder(true, 1, 2, true);
+        }
+        else {
+            encLeft = new PIDEncoder(true, 5, 6, true);
+            encNull = new Encoder(3, 4);
+            encElevator = new PIDEncoder(false, 7, 8);
+            encRight = new PIDEncoder(true, 1, 2, true);
+        }
+
+        pidLeft = new PIDController(0.0, 0.00025, 0.0, encLeft, jagLeft, 0.005);
+        pidRight = new PIDController(0.0, 0.00025, 0.0, encRight, jagRight, 0.005);
+        pidGyro = new PIDController(0.0005, 0.0005, 0.0, gyro, gyroOutput, 0.005);
+
+        //Initialize our pneumatics if we are using the practise robot or the real robot
+        if(!PRACTISE_ROBOT) {
+            transShift = new Pneumatic(new Solenoid(8));
+            elbowTop = new Pneumatic(new Solenoid(3));
+            elbowBottom = new Pneumatic(new Solenoid(2));
+            gripper = new Pneumatic(new Solenoid(1));
+            minibotHorizontal = new Pneumatic(new Solenoid(4));
+            minibotVertical = new DoubleSolenoid(6, 7);
+        }
+        else {
+            transShift = new Pneumatic(new Relay(5));
+            elbowTop = new Pneumatic(new DoubleSolenoid(3, 4));
+            elbowBottom = new Pneumatic(new DoubleSolenoid(5, 6));
+            gripper = new Pneumatic(new DoubleSolenoid(1, 2));
+            minibotHorizontal = new Pneumatic(new Relay(7));
+            minibotVertical = new DoubleSolenoid(7, 8);
+        }
+
         //Start our encoders
         encRight.start();
         encLeft.start();
@@ -178,24 +221,6 @@ public class RobotTemplate extends IterativeRobot {
 
         //Start the compressor
         compressor.start();
-
-        //Initialize our pneumatics if we are using the practise robot or the real robot
-        if(!PRACTISE_ROBOT) {
-            transShift = new Pneumatic(new Solenoid(1));
-            elbowTop = new Pneumatic(new Solenoid(2));
-            elbowBottom = new Pneumatic(new Solenoid(3));
-            gripper = new Pneumatic(new Solenoid(4));
-            minibotHorizontal = new Pneumatic(new Solenoid(5));
-        }
-        else {
-            transShift = new Pneumatic(new Relay(5));
-            elbowTop = new Pneumatic(new DoubleSolenoid(3, 4));
-            elbowBottom = new Pneumatic(new DoubleSolenoid(5, 6));
-            gripper = new Pneumatic(new DoubleSolenoid(1, 2));
-            minibotHorizontal = new Pneumatic(new Relay(7));
-        }
-
-        minibotVertical = new DoubleSolenoid(7, 8);
     }
 
     //Runs at the beginning of disabled period
@@ -213,17 +238,10 @@ public class RobotTemplate extends IterativeRobot {
     }
 
     //List of autonomous steps
-    Step stepList[] = {
-        new Step(AutonomousState.Hanging),
-        new Step(AutonomousState.Driving, 1),
-        new Step(AutonomousState.Release),
-        new Step(AutonomousState.Done),
-    };
+    Step stepList[] = null;
 
     //Iterates through each step
     int stepIndex;
-    //Number of times our setpoint has been reached
-    int gyroCounter;
 
     boolean doNothing;
     boolean heightOne;
@@ -276,6 +294,13 @@ public class RobotTemplate extends IterativeRobot {
                 new Step(AutonomousState.Done),
             };
         }
+        else {
+            stepList = new Step [] {
+                new Step(AutonomousState.Driving, 5),
+                new Step(AutonomousState.Release),
+                new Step(AutonomousState.Done),
+            };
+        }
 
         //Determine the setpoint of the elevator
         elevatorSetpoint = (heightOne && !staggeredPeg) ? ElevatorSetpoint.posOne : elevatorSetpoint;
@@ -306,20 +331,20 @@ public class RobotTemplate extends IterativeRobot {
             switch(currentStep.type) {
                 //If we want to drive forward
                 case AutonomousState.Driving:
-                    //Hold our tube in the middle state
-                    setElbow(ElbowState.Middle);
                     //If we have reached our value for this step on the left or right side
                     final boolean leftDone = -encLeft.encoder.get() / COUNTS_PER_METRE >= currentStep.get();
                     final boolean rightDone = encRight.encoder.get() / COUNTS_PER_METRE >= currentStep.get();
                     //Drive each side until we reach the value for each side
+                    robotDrive.arcadeDrive(0.6, gyroPID(true, 0.0));
                     if(!leftDone)
-                        pidLeft.setSetpoint(-0.4 * SLOW_MAX_ENCODER_RATE);
+                        pidLeft.setSetpoint(-storageLeft.get() * SLOW_MAX_ENCODER_RATE);
                     else
                         pidLeft.setSetpoint(0.0);
                     if(!rightDone)
-                        pidRight.setSetpoint(0.4 * SLOW_MAX_ENCODER_RATE);
+                        pidRight.setSetpoint(-storageRight.get() * SLOW_MAX_ENCODER_RATE);
                     else
                         pidRight.setSetpoint(0.0);
+
                     //If the value is reached
                     if(elevatorPID() && leftDone && rightDone)
                         ++stepIndex;
@@ -348,28 +373,18 @@ public class RobotTemplate extends IterativeRobot {
                             pidRight.enable();
                         }
                     } else {
-                        //Use our own calculations to get to the setpoint of the gyro
-                        final double delta = currentStep.get() - gyro.getAngle();
-                        if(Math.abs(delta) < GYRO_TOLERANCE)
-                            ++gyroCounter;
-                        if(gyroCounter >= 100)
-                            ++stepIndex;
-                        if(delta > 0) {
-                            jagLeft.set(-0.5);
-                            jagRight.set(-0.5);
-                        } else if(delta < 0) {
-                            jagLeft.set(0.5);
-                            jagRight.set(0.5);
-                        }
+                        gyroPID(false, currentStep.get());
                     }
                     break;
                 //To release the tube
                 case AutonomousState.Release:
                     if(releaseTube) {
+                        setElbow(ElbowState.Middle);
+                        Timer.delay(AUTONOMOUS_RELEASE_DELAY);
                         setElbow(ElbowState.Horizontal);
-                        gripper.set(false);
+                        gripper.set(true);
                         //Toggle the gripper to be open at the beginning of teleop
-                        gripperToggle.feed(true);
+                        gripperToggle.set(true);
                     }
                     ++stepIndex;
                     break;
@@ -391,6 +406,9 @@ public class RobotTemplate extends IterativeRobot {
                     }
                     pidLeft.enable();
                     pidLeft.enable();
+                    ++stepIndex;
+                    break;
+                default:
                     ++stepIndex;
                     break;
             }
@@ -578,11 +596,48 @@ public class RobotTemplate extends IterativeRobot {
     }
 
     public void setElbow(int state) {
+        //Update the elbow state
         elbowState = state;
-        elbowTop.set(elbowState == ElbowState.Vertical);
-        elbowBottom.set(elbowState != ElbowState.Horizontal);
+        //For the elbow pneumatics, closed = true open = false
+        //The top elbow is only ever closed in the vertical state
+        elbowTop.set(elbowState != ElbowState.Vertical);
+        //The bottom elbow is only ever open in the horizontal state
+        elbowBottom.set(elbowState == ElbowState.Horizontal);
+        //If we are vertical then close the gripper
         if(elbowState == ElbowState.Vertical)
-            gripper.set(true);
+            gripper.set(false);
+    }
+    
+    //Number of times our setpoint has been reached
+    int gyroCounter;
+
+    public double gyroPID(boolean returnSpeed, double target) {
+        //Use our own calculations to get to the setpoint of the gyro
+        final double delta = target - gyro.getAngle();
+        //For straight driving in autonomous mode
+        if(returnSpeed) {
+            if(Math.abs(delta) < GYRO_TOLERANCE)
+                ++gyroCounter;
+            if(gyroCounter >= 100) {
+                gyroCounter = 0;
+                return 0.0;
+            }
+            //The speed is incorporated into straight driving so it has to be low
+            final double speed = 0.1;
+            return delta > 0 ? -speed :speed;
+        }
+        //For turning on the spot
+        else {
+            if(Math.abs(delta) < GYRO_TOLERANCE)
+                ++gyroCounter;
+            if(gyroCounter >= 100)
+                ++stepIndex;
+            //We are turning on the spot so the turning speed is high
+            final double speed = 0.5;
+            jagLeft.set(delta >= 0 ? -speed : speed);
+            jagRight.set(delta >= 0 ? -speed : speed);
+            return 0.0;
+        }
     }
     
     double lastPrintTime = 0;
@@ -592,12 +647,12 @@ public class RobotTemplate extends IterativeRobot {
         //Current time
         final double curPrintTime = Timer.getFPGATimestamp();
         //If it has been more than half a second
-        if(curPrintTime - lastPrintTime > 0.5) {
+        if(curPrintTime - lastPrintTime > PRINT_DELAY) {
             //Make a bunch of newlines to clear the screen to only show the current output
             System.out.println("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
             //Print statements
             System.out.println("[" + mode + "]");
-            System.out.println("DS DI 1: " + ds.getDigitalIn(1) + " DS AI 1: " + ds.getAnalogIn(1));
+            System.out.println("gripperToggle: " + gripperToggle.get());
             System.out.println("renc count: " + encRight.encoder.get() + " lenc count: " + encLeft.encoder.get() + " elevator counts: " + encElevator.pidGet());
             System.out.println("rencRate: " + encRight.pidGet() + " lencRate: " + encLeft.pidGet());
             System.out.println("rSet: " + pidRight.getSetpoint() + " lSet: " + pidLeft.getSetpoint() + " eSet: " + elevatorSetpoint);
@@ -608,7 +663,7 @@ public class RobotTemplate extends IterativeRobot {
             System.out.println("jagLeft: " + jagLeft.get() + " jagRight: " + jagRight.get());
             System.out.println("elbow input: " + stickOperator.getThrottle() + "elbowState: " + elbowState);
             //System.out.println("Raven gyro min: " + gyro.min + " max: " + gyro.max + " deadzone: " + gyro.deadzone + " center: " + gyro.center);
-
+            System.out.println("rightSensor: " + rightSensor.get() + " middleSensor: " + middleSensor.get() + " leftSensor: " + leftSensor.get());
             //Update the last print time
             lastPrintTime = curPrintTime;
         }
