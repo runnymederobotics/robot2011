@@ -34,6 +34,18 @@ class Operator {
     static final int MINIBOT_RELEASE_TWO = 6;
 }
 
+//Enumeration of setpoints for different heights of the elevator
+class ElevatorSetpoint {
+    static final double ground = 0;
+    static final double posOne = 250;
+    static final double posTwo = 620;
+    static final double posThree = 2000;
+    static final double posFour = 2360;
+    static final double posFive = 3750;
+    static final double posSix = 3900;
+    static final double feed = 1865;
+}
+
 class ElbowState {
     static final int Horizontal = 0;
     static final int Middle = 1;
@@ -73,7 +85,7 @@ public class RobotTemplate extends IterativeRobot {
     //Tolerance for the gyro pid
     static final double GYRO_TOLERANCE = 1.0;
     //Delay between
-    static final double AUTONOMOUS_RELEASE_DELAY = 1.5;
+    static final double AUTONOMOUS_RELEASE_DELAY = 0.5;
     //Print delay
     static final double PRINT_DELAY = 0.5;
 
@@ -146,18 +158,6 @@ public class RobotTemplate extends IterativeRobot {
 
     ButtonPress elbowUp = new ButtonPress();
     ButtonPress elbowDown = new ButtonPress();
-
-    //Enumeration of setpoints for different heights of the elevator
-    class ElevatorSetpoint {
-        static final double ground = 0;
-        static final double posOne = MAX_ELEVATOR_COUNTS * 1.0 / 6.0;
-        static final double posTwo = MAX_ELEVATOR_COUNTS * 2.0 / 6.0;
-        static final double posThree = MAX_ELEVATOR_COUNTS * 3.0 / 6.0;
-        static final double posFour = MAX_ELEVATOR_COUNTS * 4.0 / 6.0;
-        static final double posFive = MAX_ELEVATOR_COUNTS * 5.0 / 6.0;
-        static final double posSix = MAX_ELEVATOR_COUNTS;
-        static final double feed = 0;
-    }
 
     //The elevator setpoint, determined by which button on the operator joystick is pressed
     double elevatorSetpoint = ElevatorSetpoint.ground;
@@ -296,7 +296,7 @@ public class RobotTemplate extends IterativeRobot {
         }
         else {
             stepList = new Step [] {
-                new Step(AutonomousState.Driving, 5),
+                new Step(AutonomousState.Driving, 2850),
                 new Step(AutonomousState.Release),
                 new Step(AutonomousState.Done),
             };
@@ -332,10 +332,10 @@ public class RobotTemplate extends IterativeRobot {
                 //If we want to drive forward
                 case AutonomousState.Driving:
                     //If we have reached our value for this step on the left or right side
-                    final boolean leftDone = -encLeft.encoder.get() / COUNTS_PER_METRE >= currentStep.get();
-                    final boolean rightDone = encRight.encoder.get() / COUNTS_PER_METRE >= currentStep.get();
+                    final boolean leftDone = -encLeft.encoder.get() >= currentStep.get();
+                    final boolean rightDone = encRight.encoder.get() >= currentStep.get();
                     //Drive each side until we reach the value for each side
-                    robotDrive.arcadeDrive(0.6, gyroPID(true, 0.0));
+                    robotDrive.arcadeDrive(0.65, gyroPID(true, 0.0));
                     if(!leftDone)
                         pidLeft.setSetpoint(-storageLeft.get() * SLOW_MAX_ENCODER_RATE);
                     else
