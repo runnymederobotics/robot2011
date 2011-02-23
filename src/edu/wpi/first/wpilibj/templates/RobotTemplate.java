@@ -18,20 +18,21 @@ class Driver {
 //Operator joystick
 class Operator {
     //Buttons
-    static final int ELEVATOR_STATE_GROUND = 1;
+    static final int ELEVATOR_STATE_GROUND = 4;
     static final int ELEVATOR_STATE_ONE = 11;
     static final int ELEVATOR_STATE_TWO = 12;
     static final int ELEVATOR_STATE_THREE = 9;
     static final int ELEVATOR_STATE_FOUR = 10;
     static final int ELEVATOR_STATE_FIVE = 7;
     static final int ELEVATOR_STATE_SIX = 8;
-    static final int ELEVATOR_STATE_FEED = 2;
+    static final int ELEVATOR_STATE_FEED = 6;
     static final int ELEVATOR_MANUAL_TOGGLE = 5;
     static final int GRIPPER_TOGGLE = 3;
     static final int ELBOW_UP = 6;
     static final int ELBOW_DOWN = 4;
     static final int MINIBOT_RELEASE_ONE = 5;
     static final int MINIBOT_RELEASE_TWO = 6;
+    static final int RELEASE_TUBE = 1;
 }
 
 //Enumeration of setpoints for different heights of the elevator
@@ -56,7 +57,7 @@ class ElbowState {
 class AutonomousState {
     static final int Driving = 0;
     static final int Turning = 1;
-    static final int Hanging = 2;
+    static final int Reset = 2;
     static final int Release = 3;
     static final int Done = 4;
     static final int Sleep = 5;
@@ -88,6 +89,7 @@ public class RobotTemplate extends IterativeRobot {
     static final double AUTONOMOUS_RELEASE_DELAY = 0.5;
     //Print delay
     static final double PRINT_DELAY = 0.5;
+    static final int AUTONOMOUS_DRIVE_COUNTS = 2600;
 
     //Driver station
     DriverStation ds = DriverStation.getInstance();
@@ -145,13 +147,13 @@ public class RobotTemplate extends IterativeRobot {
     PIDController pidGyro;
 
     //Toggle for manual or automated elevator control
-    Toggle manualElevatorToggle = new Toggle(true); //Automated elevator
+    Toggle manualElevatorToggle = new Toggle(false);
     //Toggle for the transmission shifter
-    Toggle transToggle = new Toggle(false); //Low gear
+    Toggle transToggle = new Toggle(false);
     //Toggle for the gripper
-    Toggle gripperToggle = new Toggle(false); //Gripper closed
+    Toggle gripperToggle = new Toggle(false);
     //Toggle for arcade/tank drive
-    Toggle arcadeToggle = new Toggle(false); //Tank drive
+    Toggle arcadeToggle = new Toggle(true);
     
     //State of elbow
     int elbowState;
@@ -177,8 +179,8 @@ public class RobotTemplate extends IterativeRobot {
             encRight = new PIDEncoder(true, 1, 2, true);
         }
 
-        pidLeft = new PIDController(0.0, 0.00025, 0.0, encLeft, jagLeft, 0.005);
-        pidRight = new PIDController(0.0, 0.00025, 0.0, encRight, jagRight, 0.005);
+        pidLeft = new PIDController(0.0, 0.0005, 0.0, encLeft, jagLeft, 0.005);
+        pidRight = new PIDController(0.0, 0.0005, 0.0, encRight, jagRight, 0.005);
         pidGyro = new PIDController(0.0005, 0.0005, 0.0, gyro, gyroOutput, 0.005);
 
         //Initialize our pneumatics if we are using the practise robot or the real robot
@@ -296,7 +298,8 @@ public class RobotTemplate extends IterativeRobot {
         }
         else {
             stepList = new Step [] {
-                new Step(AutonomousState.Driving, 2850),
+                new Step(AutonomousState.Driving, AUTONOMOUS_DRIVE_COUNTS),
+                new Step(AutonomousState.Release),
                 new Step(AutonomousState.Release),
                 new Step(AutonomousState.Done),
             };
@@ -339,11 +342,11 @@ public class RobotTemplate extends IterativeRobot {
                     if(!leftDone)
                         pidLeft.setSetpoint(-storageLeft.get() * SLOW_MAX_ENCODER_RATE);
                     else
-                        pidLeft.setSetpoint(0.0);
+                        pidLeft.disable();
                     if(!rightDone)
                         pidRight.setSetpoint(-storageRight.get() * SLOW_MAX_ENCODER_RATE);
                     else
-                        pidRight.setSetpoint(0.0);
+                        pidRight.disable();
 
                     //If the value is reached
                     if(elevatorPID() && leftDone && rightDone)
@@ -376,15 +379,18 @@ public class RobotTemplate extends IterativeRobot {
                         gyroPID(false, currentStep.get());
                     }
                     break;
+                case AutonomousState.Reset:
+                    setElbow(ElbowState.Vertical);
+                    elevatorSetpoint = ElevatorSetpoint.ground;
+                    if(elevatorPID())
+                        ++stepIndex;
+                    break;
                 //To release the tube
                 case AutonomousState.Release:
                     if(releaseTube) {
                         setElbow(ElbowState.Middle);
                         Timer.delay(AUTONOMOUS_RELEASE_DELAY);
-                        setElbow(ElbowState.Horizontal);
-                        gripper.set(true);
-                        //Toggle the gripper to be open at the beginning of teleop
-                        gripperToggle.set(true);
+                        releaseTube();
                     }
                     ++stepIndex;
                     break;
@@ -421,6 +427,8 @@ public class RobotTemplate extends IterativeRobot {
             gyro.reset();
             vicElevator.set(0.0);
             //Stop
+            pidLeft.enable();
+            pidRight.enable();
             pidLeft.setSetpoint(0.0);
             pidRight.setSetpoint(0.0);
             //Reset gyro counter to 0
@@ -604,8 +612,10 @@ public class RobotTemplate extends IterativeRobot {
         //The bottom elbow is only ever open in the horizontal state
         elbowBottom.set(elbowState == ElbowState.Horizontal);
         //If we are vertical then close the gripper
-        if(elbowState == ElbowState.Vertical)
+        if(elbowState == ElbowState.Vertical) {
             gripper.set(false);
+            gripperToggle.set(false);
+        }
     }
     
     //Number of times our setpoint has been reached
@@ -638,6 +648,13 @@ public class RobotTemplate extends IterativeRobot {
             jagRight.set(delta >= 0 ? -speed : speed);
             return 0.0;
         }
+    }
+
+    public void releaseTube() {
+        setElbow(ElbowState.Horizontal);
+        gripper.set(true);
+        //Toggle the gripper to be open at the beginning of teleop
+        gripperToggle.set(true);
     }
     
     double lastPrintTime = 0;
