@@ -7,6 +7,8 @@ public class Pneumatic {
     DoubleSolenoid doubleSolenoid;
     Relay relay;
 
+    boolean state;
+
     public Pneumatic(Solenoid s) {
         singleSolenoid = s;
     }
@@ -26,5 +28,13 @@ public class Pneumatic {
             doubleSolenoid.set(val ? DoubleSolenoid.Value.kForward : DoubleSolenoid.Value.kReverse);
         else if(relay != null)
             relay.set(val ? Relay.Value.kForward : Relay.Value.kReverse);
+        else
+            return;
+
+        state = val;
+    }
+
+    public boolean get() {
+        return state;
     }
 }

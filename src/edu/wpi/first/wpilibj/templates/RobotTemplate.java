@@ -74,7 +74,7 @@ class Lights {
     static final int Red = 0;
     static final int White = 1;
     static final int Blue = 2;
-    static final int Off = 3;
+    static final int Off = 6;
 }
 
 public class RobotTemplate extends IterativeRobot {
@@ -104,6 +104,14 @@ public class RobotTemplate extends IterativeRobot {
     //Print delay
     static final double PRINT_DELAY = 0.5;
     static final int AUTONOMOUS_DRIVE_COUNTS = 2600;
+
+    //distance in inches for scoring/feeding
+    static final double MIN_SCORING_DISTANCE = 28.0;
+    static final double MAX_SCORING_DISTANCE = 42.0;
+    static final double MIN_FEEDING_DISTANCE = 10.0;
+    static final double MAX_FEEDING_DISTANCE = 20.0;
+
+    static final double FLASH_TIME = 0.25;
 
     static final double ULTRASONIC_VOLTS_PER_INCH = 0.0098;
 
@@ -156,6 +164,8 @@ public class RobotTemplate extends IterativeRobot {
     DigitalInput rightSensor = new DigitalInput(11);
     DigitalInput middleSensor = new DigitalInput(12);
     DigitalInput leftSensor = new DigitalInput(13);
+
+    AnalogChannel ultrasonicSensor = new AnalogChannel(2);
 
     //Provides drive functions (arcade and tank drive)
     RobotDrive robotDrive = new RobotDrive(storageLeft, storageRight);
@@ -473,8 +483,18 @@ public class RobotTemplate extends IterativeRobot {
                     case AutonomousState.Driving:
                         int direction = currentStep.get() > 0 ? 1 : -1;
                         //If we have reached our value for this step on the left or right side
-                        final boolean leftDone = -encLeft.encoder.get() >= Math.abs(currentStep.get());
-                        final boolean rightDone = encRight.encoder.get() >= Math.abs(currentStep.get());
+                        boolean leftDone = false;
+                        boolean rightDone = false;
+
+                        if(direction == 1) {
+                            leftDone  = -encLeft.encoder.get() >= currentStep.get();
+                            rightDone = encRight.encoder.get() >= currentStep.get();
+                        }
+                        else if (direction == -1) {
+                            leftDone  = -encLeft.encoder.get() <= currentStep.get();
+                            rightDone = encRight.encoder.get() <= currentStep.get();
+                        }
+
                         //Drive each side until we reach the value for each side
                         robotDrive.arcadeDrive(0.65, gyroPID(true, 0.0));
                         if(!leftDone)
@@ -584,7 +604,7 @@ public class RobotTemplate extends IterativeRobot {
     double minibotReleaseTime;
     //Releasing minibot
     boolean releaseMinibot;
-    int lightState = Lights.Red;
+    int lightState = Lights.Off;
 
     //Runs at the beginning of teleoperated period
     public void teleopInit() {
@@ -604,30 +624,39 @@ public class RobotTemplate extends IterativeRobot {
         print("Teleoperated");
     }
 
+    int lastColor = Lights.Off;
+
     //Runs continuously during teleoperated period
     public void teleopContinuous() {
         //Don't allow the gyro to be more or less than 360 degrees
         if(gyro.pidGet() < -360 || gyro.pidGet() > 360)
             gyro.reset();
 
-        boolean selectLight = stickOperator.getRawButton(Operator.LIGHT_SELECTION);
-        if(selectLight && stickOperator.getRawButton(Operator.LIGHT_RED)) {
-            lightState = Lights.Red;
-        }
-        if(selectLight && stickOperator.getRawButton(Operator.LIGHT_WHITE)) {
-            lightState = Lights.White;
-        }
-        if(selectLight && stickOperator.getRawButton(Operator.LIGHT_BLUE)) {
-            lightState = Lights.Blue;
-        }
-        if(selectLight && stickOperator.getRawButton(Operator.LIGHT_OFF)) {
-            lightState = Lights.Off;
-        }
+        boolean finale = Timer.getFPGATimestamp() - teleopStartTime >= MINIBOT_RELEASE_TIME;
+        final double distance = ultrasonicSensor.getVoltage() / ULTRASONIC_VOLTS_PER_INCH;
         
-        flashLED();
-        
-        if(!selectLight)
-        {
+        boolean flashCurrentColor = false;
+
+        if(!gripper.get()) { //trying to score
+            if(distance > MIN_SCORING_DISTANCE && distance < MAX_SCORING_DISTANCE)
+                flashCurrentColor = true;
+        }
+        else if(elevatorSetpoint == ElevatorSetpoint.feed) { //gripper is open and feed position
+            if(distance > MIN_FEEDING_DISTANCE && distance < MAX_FEEDING_DISTANCE)
+                flashCurrentColor = true;
+        }
+
+        if(stickOperator.getRawButton(Operator.LIGHT_SELECTION)) {
+            if(stickOperator.getRawButton(Operator.LIGHT_RED))
+                lightState = Lights.Red;
+            if(stickOperator.getRawButton(Operator.LIGHT_WHITE))
+                lightState = Lights.White;
+            if(stickOperator.getRawButton(Operator.LIGHT_BLUE))
+                lightState = Lights.Blue;
+            if(stickOperator.getRawButton(Operator.LIGHT_OFF))
+                lightState = Lights.Off;
+        }
+        else {
             //The elevator setpoint based on the corresponding button
             elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_GROUND) ? ElevatorSetpoint.ground : elevatorSetpoint;
             elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_ONE) ? ElevatorSetpoint.posOne : elevatorSetpoint;
@@ -638,6 +667,9 @@ public class RobotTemplate extends IterativeRobot {
             elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_SIX) ? ElevatorSetpoint.posSix : elevatorSetpoint;
             elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_FEED) ? ElevatorSetpoint.feed : elevatorSetpoint;
         }
+
+        flashLED(finale, flashCurrentColor);
+
         //Feed the toggle on the manual/automated elevator control
         manualElevatorToggle.feed(stickOperator.getRawButton(Operator.ELEVATOR_MANUAL_TOGGLE));
         //Manual or automated elevator control
@@ -763,7 +795,7 @@ public class RobotTemplate extends IterativeRobot {
         }
 
         //If there are 10 seconds left
-        if(Timer.getFPGATimestamp() - teleopStartTime >= MINIBOT_RELEASE_TIME) {
+        if(finale) {
             //If we triggered the release, set the release to true, otherwise just leave it
             //Creates a one-way toggle
             releaseMinibot = stickOperator.getRawButton(Operator.MINIBOT_RELEASE_ONE) && stickOperator.getRawButton(Operator.MINIBOT_RELEASE_TWO) ? true : releaseMinibot;
@@ -859,40 +891,57 @@ public class RobotTemplate extends IterativeRobot {
     }
 
     double flashTime = 0;
-    static final double FLASH_TIME = 1.0;
+    boolean flash = false;
 
-    public void flashLED() {
-        /*double now = Timer.getFPGATimestamp();
+    public void flashLED(boolean finale, boolean flashingColor) {
+        double now = Timer.getFPGATimestamp();
         if(now - flashTime > FLASH_TIME) {
+            flash = !flash;
             flashTime = now;
-            if(lightState < Lights.Blue)
-                ++lightState;
-            else
-                lightState = Lights.Red;
-        }*/
-        
-        switch(lightState) {
-            case Lights.Red:
-                lightsOne.set(true);
-                lightsTwo.relay.set(Relay.Value.kOff);
-                break;
-            case Lights.White:
-                lightsOne.set(false);
-                lightsTwo.relay.set(Relay.Value.kOff);
-                break;
-            case Lights.Blue:
-                lightsOne.relay.set(Relay.Value.kOff);
-                lightsTwo.set(true);
-                break;
-            case Lights.Off:
-            default:
-                lightsOne.relay.set(Relay.Value.kOff);
-                lightsTwo.relay.set(Relay.Value.kOff);
-                break;
         }
 
-        if(transState)
-            lightsTwo.set(false);
+        if(finale) {
+            if(flash) {
+                lightsOne.set(false);
+                lightsTwo.set(false);
+            }
+            else {
+                lightsOne.relay.set(Relay.Value.kOff);
+                lightsTwo.relay.set(Relay.Value.kOff);
+            }
+        }
+        else {
+            switch(lightState) {
+                case Lights.Red:
+                    lightsOne.set(true);
+                    if(flashingColor && !flash)
+                        lightsOne.relay.set(Relay.Value.kOff);
+                    lightsTwo.relay.set(Relay.Value.kOff);
+                    break;
+                case Lights.White:
+                    lightsOne.set(false);
+                    if(flashingColor && !flash)
+                        lightsOne.relay.set(Relay.Value.kOff);
+                    lightsTwo.relay.set(Relay.Value.kOff);
+                    break;
+                case Lights.Blue:
+                    lightsOne.relay.set(Relay.Value.kOff);
+                    lightsTwo.set(true);
+                    if(flashingColor && !flash)
+                        lightsTwo.relay.set(Relay.Value.kOff);
+                    break;
+                case Lights.Off:
+                default:
+                    lightsOne.relay.set(Relay.Value.kOff);
+                    lightsTwo.relay.set(Relay.Value.kOff);
+                    break;
+            }
+
+            if(transState) {
+                lightsOne.relay.set(Relay.Value.kOff);
+                lightsTwo.set(false);
+            }
+        }
     }
     
     double lastPrintTime = 0;
@@ -920,6 +969,7 @@ public class RobotTemplate extends IterativeRobot {
             //System.out.println("Raven gyro min: " + gyro.min + " max: " + gyro.max + " deadzone: " + gyro.deadzone + " center: " + gyro.center);
             System.out.println("rightSensor: " + rightSensor.get() + " middleSensor: " + middleSensor.get() + " leftSensor: " + leftSensor.get());
             System.out.println("light: " + lightState);
+            System.out.println("ultrasonic distance: " + ultrasonicSensor.getVoltage() / ULTRASONIC_VOLTS_PER_INCH);
             //Update the last print time
             lastPrintTime = curPrintTime;
         }
