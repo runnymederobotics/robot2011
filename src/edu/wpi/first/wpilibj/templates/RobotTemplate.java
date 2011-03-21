@@ -5,8 +5,8 @@ import edu.wpi.first.wpilibj.*;
 //Driver joystick
 class Driver {
     //Buttons
-    static final int TRANS_TOGGLE_LEFT = 7;
-    static final int TRANS_TOGGLE_RIGHT = 8;
+    static final int TRANS_TOGGLE_LOW = 7;
+    static final int TRANS_TOGGLE_HIGH = 8;
     static final int ARCADE_TOGGLE = 1;
 
     //Axes
@@ -74,7 +74,7 @@ class Lights {
     static final int Red = 0;
     static final int White = 1;
     static final int Blue = 2;
-    static final int Off = 6;
+    static final int Off = 3;
 }
 
 public class RobotTemplate extends IterativeRobot {
@@ -291,6 +291,7 @@ public class RobotTemplate extends IterativeRobot {
     boolean heightThree;
     boolean staggeredPeg;
     boolean releaseTube;
+    boolean reverse;
     double startPosition;
 
     //Runs at the beginning of autonomous period
@@ -303,6 +304,7 @@ public class RobotTemplate extends IterativeRobot {
         heightThree = ds.getDigitalIn(5);
         staggeredPeg = ds.getDigitalIn(6);
         releaseTube = ds.getDigitalIn(7);
+        reverse = ds.getDigitalIn(8);
         startPosition = ds.getAnalogIn(1);
 
         //Minibot defaults to up
@@ -341,9 +343,8 @@ public class RobotTemplate extends IterativeRobot {
             stepList = new Step[] {
                 new Step(AutonomousState.Driving, AUTONOMOUS_DRIVE_COUNTS),
                 new Step(AutonomousState.Release),
-                //new Step(AutonomousState.Driving, steal ? COUNTS_PER_METRE - AUTONOMOUS_DRIVE_COUNTS : 0),
-                //new Step(AutonomousState.Turning, steal ? 90 : 0),
-                //new Step(AutonomousState.Turning, steal ? -90 : 0),
+                new Step(AutonomousState.Driving, reverse ? -AUTONOMOUS_DRIVE_COUNTS : 0),
+                new Step(AutonomousState.Turning, reverse ? 180 : 0),
                 new Step(AutonomousState.Done),
             };
         }
@@ -687,8 +688,8 @@ public class RobotTemplate extends IterativeRobot {
         else if(transState)
             transState = rate <= 0.6 * FAST_MAX_ENCODER_RATE && Math.abs(stickDriver.getRawAxis(Driver.Y_AXIS_LEFT)) <= 0.6 ? false : transState;
 
-        transState = stickDriver.getRawButton(Driver.TRANS_TOGGLE_LEFT) ? false : transState;
-        transState = stickDriver.getRawButton(Driver.TRANS_TOGGLE_RIGHT) ? true : transState;
+        transState = stickDriver.getRawButton(Driver.TRANS_TOGGLE_LOW) ? false : transState;
+        transState = stickDriver.getRawButton(Driver.TRANS_TOGGLE_HIGH) ? true : transState;
 
         //TODO: the following line was a hack to make the test robot work. remove it
         //transState = false;
