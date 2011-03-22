@@ -28,11 +28,9 @@ class Operator {
     static final int ELEVATOR_STATE_SIX = 8;
     static final int ELEVATOR_STATE_FEED = 6;
     static final int ELEVATOR_MANUAL_TOGGLE = 5;
-    static final int GRIPPER_TOGGLE = 3;
+    static final int GRIPPER_TOGGLE = 1;
     static final int MINIBOT_RELEASE_ONE = 5;
     static final int MINIBOT_RELEASE_TWO = 6;
-    static final int MINIBOT_SERVO_RELEASE = 2;
-    static final int RELEASE_TUBE = 1;
     
     static final int LIGHT_SELECTION = 2;
     static final int LIGHT_RED = 7;
@@ -95,7 +93,7 @@ public class RobotTemplate extends IterativeRobot {
     //Number of seconds to wait in teleoperated mode before the minibot is allowed to be deployed
     static final double MINIBOT_RELEASE_TIME = 110.0;
     //Number of seconds after the minibot drops before we send it out horizontally
-    static final double MINIBOT_HORIZONTAL_DELAY = 0.5;
+    static final double MINIBOT_SERVO_DELAY = 0.5;
     //Tolerance for the gyro pid
     static final double GYRO_TOLERANCE = 5.0;
     //Delay between
@@ -105,9 +103,9 @@ public class RobotTemplate extends IterativeRobot {
     static final int AUTONOMOUS_DRIVE_COUNTS = 2600;
 
     //distance in inches for scoring/feeding
-    static final double MIN_SCORING_DISTANCE = 28.0;
-    static final double MAX_SCORING_DISTANCE = 42.0;
-    static final double MIN_FEEDING_DISTANCE = 10.0;
+    static final double MIN_SCORING_DISTANCE = 30.0;
+    static final double MAX_SCORING_DISTANCE = 36.0;
+    static final double MIN_FEEDING_DISTANCE = 15.0;
     static final double MAX_FEEDING_DISTANCE = 20.0;
 
     static final double FLASH_TIME = 0.25;
@@ -132,10 +130,8 @@ public class RobotTemplate extends IterativeRobot {
     Pneumatic elbowTop;
     Pneumatic elbowBottom;
     Pneumatic gripper;
-    Pneumatic minibotHorizontal;
 
-    //Vertical is always a double solenoid
-    Pneumatic minibotVertical;
+    Pneumatic minibotRelease;
 
     //Gyro
     Gyro gyro = new Gyro(1);
@@ -219,8 +215,7 @@ public class RobotTemplate extends IterativeRobot {
             elbowTop = new Pneumatic(new Solenoid(3));
             elbowBottom = new Pneumatic(new Solenoid(2));
             gripper = new Pneumatic(new Solenoid(1));
-            minibotHorizontal = new Pneumatic(new Solenoid(4));
-            minibotVertical = new Pneumatic(new DoubleSolenoid(6, 7));
+            minibotRelease = new Pneumatic(new DoubleSolenoid(6, 7));
 
             lightsOne = new Pneumatic(new Relay(2));
             lightsTwo = new Pneumatic(new Relay(3));
@@ -230,8 +225,7 @@ public class RobotTemplate extends IterativeRobot {
             elbowTop = new Pneumatic(new DoubleSolenoid(3, 4));
             elbowBottom = new Pneumatic(new DoubleSolenoid(5, 6));
             gripper = new Pneumatic(new DoubleSolenoid(1, 2));
-            minibotHorizontal = new Pneumatic(new Relay(7));
-            minibotVertical = new Pneumatic(new DoubleSolenoid(7, 8));
+            minibotRelease = new Pneumatic(new DoubleSolenoid(7, 8));
 
             lightsOne = new Pneumatic(new Relay(6));
             lightsTwo = new Pneumatic(new Relay(8));
@@ -305,9 +299,8 @@ public class RobotTemplate extends IterativeRobot {
         reverse = ds.getDigitalIn(8);
         startPosition = ds.getAnalogIn(1);
 
-        //Minibot defaults to up
-        minibotHorizontal.set(false);
-        minibotVertical.set(false);
+        //Minibot defaults to in
+        minibotRelease.set(false);
         minibotServo.set(0);
 
         //Default to slow driving mode
@@ -550,7 +543,7 @@ public class RobotTemplate extends IterativeRobot {
                             Timer.delay(AUTONOMOUS_RELEASE_DELAY);
                             releaseTube();
                             Timer.delay(1000);
-                            elevatorSetpoint = steal ? ElevatorSetpoint.ground : elevatorSetpoint;
+                            elevatorSetpoint = ElevatorSetpoint.ground;
                         }
                         ++stepIndex;
                         break;
@@ -613,9 +606,8 @@ public class RobotTemplate extends IterativeRobot {
         minibotServoTime = 0.0;
         releaseMinibot = false;
 
-        //Minibot defaults to up
-        minibotHorizontal.set(false);
-        minibotVertical.set(false);
+        //Minibot defaults to in
+        minibotRelease.set(false);
         minibotServo.set(0);
     }
 
@@ -666,16 +658,16 @@ public class RobotTemplate extends IterativeRobot {
             elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_FOUR) ? ElevatorSetpoint.posFour : elevatorSetpoint;
             elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_FIVE) ? ElevatorSetpoint.posFive : elevatorSetpoint;
             elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_SIX) ? ElevatorSetpoint.posSix : elevatorSetpoint;
-            elevatorSetpoint = stickOperator.getRawButton(Operator.ELEVATOR_STATE_FEED) ? ElevatorSetpoint.feed : elevatorSetpoint;
+            elevatorSetpoint = !finale /*this is one of the minibot release buttons*/ && stickOperator.getRawButton(Operator.ELEVATOR_STATE_FEED) ? ElevatorSetpoint.feed : elevatorSetpoint;
         }
 
         flashLED(finale, flashCurrentColor);
 
-        //Feed the toggle on the manual/automated elevator control
-        manualElevatorToggle.feed(stickOperator.getRawButton(Operator.ELEVATOR_MANUAL_TOGGLE));
+        //Disable manual elevator toggle during the finale
+        manualElevatorToggle.feed(!finale && stickOperator.getRawButton(Operator.ELEVATOR_MANUAL_TOGGLE));
         //Manual or automated elevator control
         if(manualElevatorToggle.get()) {
-            vicElevator.set(-stickOperator.getAxis(Joystick.AxisType.kY));
+            vicElevator.set(stickOperator.getAxis(Joystick.AxisType.kY));
         } else {
             elevatorPID();
         }
@@ -683,10 +675,13 @@ public class RobotTemplate extends IterativeRobot {
         //Minus because the left encoder is negative
         double rate = Math.abs((encRight.pidGet() - encLeft.pidGet()) / 2);
 
+        final double LOW_SPEED_PERCENT = 0.9;
+        final double HIGH_SPEED_PERCENT = 0.6;
+
         if(!transState)
-            transState = rate >= 0.9 * SLOW_MAX_ENCODER_RATE && Math.abs(stickDriver.getRawAxis(Driver.Y_AXIS_LEFT)) >= 0.9 ? true : transState;
+            transState = rate >= LOW_SPEED_PERCENT * SLOW_MAX_ENCODER_RATE && Math.abs(stickDriver.getRawAxis(Driver.Y_AXIS_LEFT)) >= LOW_SPEED_PERCENT ? true : transState;
         else if(transState)
-            transState = rate <= 0.6 * FAST_MAX_ENCODER_RATE && Math.abs(stickDriver.getRawAxis(Driver.Y_AXIS_LEFT)) <= 0.6 ? false : transState;
+            transState = rate <= HIGH_SPEED_PERCENT * FAST_MAX_ENCODER_RATE && Math.abs(stickDriver.getRawAxis(Driver.Y_AXIS_LEFT)) <= HIGH_SPEED_PERCENT ? false : transState;
 
         transState = stickDriver.getRawButton(Driver.TRANS_TOGGLE_LOW) ? false : transState;
         transState = stickDriver.getRawButton(Driver.TRANS_TOGGLE_HIGH) ? true : transState;
@@ -793,17 +788,16 @@ public class RobotTemplate extends IterativeRobot {
             //If we want to release
             if(releaseMinibot) {
                 //Set the vertical relay to released
-                minibotVertical.set(true);
+                minibotRelease.set(true);
                 //If the release time is 0 (we haven't set the release time yet) then set the release time
                 //Allows us to set the release time only once
                 minibotServoTime = minibotServoTime == 0.0 ? Timer.getFPGATimestamp() : minibotServoTime;
                 //If it's been at least 2 seconds since the release was triggered
-                if(Timer.getFPGATimestamp() - minibotServoTime >= MINIBOT_HORIZONTAL_DELAY) {
+                if(Timer.getFPGATimestamp() - minibotServoTime >= MINIBOT_SERVO_DELAY) {
                     //Set the horizontal relay to released
-                    minibotHorizontal.set(true);
-                }
-                if(stickOperator.getRawButton(Operator.MINIBOT_SERVO_RELEASE))
+                    //if(stickOperator.getRawButton(Operator.MINIBOT_SERVO_RELEASE))
                     minibotServo.set(255);
+                }
             }
         }
     }
@@ -896,11 +890,11 @@ public class RobotTemplate extends IterativeRobot {
         if(finale) {
             if(flash) {
                 lightsOne.set(false);
-                lightsTwo.set(false);
+                lightsTwo.set(true);
             }
             else {
-                lightsOne.relay.set(Relay.Value.kOff);
-                lightsTwo.relay.set(Relay.Value.kOff);
+                lightsOne.set(true);
+                lightsTwo.set(false);
             }
         }
         else {
@@ -924,6 +918,18 @@ public class RobotTemplate extends IterativeRobot {
                         lightsTwo.relay.set(Relay.Value.kOff);
                     break;
                 case Lights.Off:
+                    //If the lights are off but we want to flash (distance sensor) default to red light
+                    if(flashingColor) {
+                        lightsOne.set(true);
+                        if(!flash)
+                            lightsOne.relay.set(Relay.Value.kOff);
+                        lightsTwo.relay.set(Relay.Value.kOff);
+                    }
+                    else {
+                        lightsOne.relay.set(Relay.Value.kOff);
+                        lightsTwo.relay.set(Relay.Value.kOff);
+                    }
+                    break;
                 default:
                     lightsOne.relay.set(Relay.Value.kOff);
                     lightsTwo.relay.set(Relay.Value.kOff);
