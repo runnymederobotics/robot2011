@@ -31,6 +31,7 @@ class Operator {
     static final int GRIPPER_TOGGLE = 3;
     static final int MINIBOT_RELEASE_ONE = 5;
     static final int MINIBOT_RELEASE_TWO = 6;
+    static final int MINIBOT_SERVO_RELEASE = 2;
     static final int RELEASE_TUBE = 1;
     
     static final int LIGHT_SELECTION = 2;
@@ -152,6 +153,8 @@ public class RobotTemplate extends IterativeRobot {
 
     //Victors
     Victor vicElevator = new Victor(3);
+
+    Servo minibotServo = new Servo(4);
 
     //Encoders
     PIDEncoder encLeft;
@@ -305,6 +308,7 @@ public class RobotTemplate extends IterativeRobot {
         //Minibot defaults to up
         minibotHorizontal.set(false);
         minibotVertical.set(false);
+        minibotServo.set(0);
 
         //Default to slow driving mode
         transShift.set(false);
@@ -597,7 +601,7 @@ public class RobotTemplate extends IterativeRobot {
     //Start time for teleoperated mode
     double teleopStartTime;
     //Start time for when the minibot release is triggered
-    double minibotReleaseTime;
+    double minibotServoTime;
     //Releasing minibot
     boolean releaseMinibot;
     int lightState = Lights.Off;
@@ -606,12 +610,13 @@ public class RobotTemplate extends IterativeRobot {
     public void teleopInit() {
         //Initialize variables
         teleopStartTime = Timer.getFPGATimestamp();
-        minibotReleaseTime = 0.0;
+        minibotServoTime = 0.0;
         releaseMinibot = false;
 
         //Minibot defaults to up
         minibotHorizontal.set(false);
         minibotVertical.set(false);
+        minibotServo.set(0);
     }
 
     //Runs periodically during teleoperated period
@@ -791,12 +796,14 @@ public class RobotTemplate extends IterativeRobot {
                 minibotVertical.set(true);
                 //If the release time is 0 (we haven't set the release time yet) then set the release time
                 //Allows us to set the release time only once
-                minibotReleaseTime = minibotReleaseTime == 0.0 ? Timer.getFPGATimestamp() : minibotReleaseTime;
+                minibotServoTime = minibotServoTime == 0.0 ? Timer.getFPGATimestamp() : minibotServoTime;
                 //If it's been at least 2 seconds since the release was triggered
-                if(Timer.getFPGATimestamp() - minibotReleaseTime >= MINIBOT_HORIZONTAL_DELAY) {
+                if(Timer.getFPGATimestamp() - minibotServoTime >= MINIBOT_HORIZONTAL_DELAY) {
                     //Set the horizontal relay to released
                     minibotHorizontal.set(true);
                 }
+                if(stickOperator.getRawButton(Operator.MINIBOT_SERVO_RELEASE))
+                    minibotServo.set(255);
             }
         }
     }
