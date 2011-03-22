@@ -29,8 +29,6 @@ class Operator {
     static final int ELEVATOR_STATE_FEED = 6;
     static final int ELEVATOR_MANUAL_TOGGLE = 5;
     static final int GRIPPER_TOGGLE = 3;
-    static final int ELBOW_UP = 6;
-    static final int ELBOW_DOWN = 4;
     static final int MINIBOT_RELEASE_ONE = 5;
     static final int MINIBOT_RELEASE_TWO = 6;
     static final int RELEASE_TUBE = 1;
@@ -186,9 +184,6 @@ public class RobotTemplate extends IterativeRobot {
     
     //State of elbow
     int elbowState;
-
-    ButtonPress elbowUp = new ButtonPress();
-    ButtonPress elbowDown = new ButtonPress();
 
     //The elevator setpoint, determined by which button on the operator joystick is pressed
     double elevatorSetpoint = ElevatorSetpoint.ground;
@@ -707,16 +702,6 @@ public class RobotTemplate extends IterativeRobot {
         //Set the gripper to open or closed based on the state of the toggle
         if(elbowState != ElbowState.Vertical)
             gripper.set(gripperToggle.get());
-
-        //Feed the buttons
-        elbowUp.feed(stickOperator.getRawButton(Operator.ELBOW_UP));
-        elbowDown.feed(stickOperator.getRawButton(Operator.ELBOW_DOWN));
-
-        //Horizontal < Middle < Vertical
-        /*if(elbowUp.get())
-            elbowState += elbowState < ElbowState.Vertical ? 1 : 0;
-        if(elbowDown.get())
-            elbowState -= elbowState > ElbowState.Horizontal ? 1 : 0;*/
 
         double elbowInput = -stickOperator.getAxis(Joystick.AxisType.kThrottle);
         if(elbowInput < -0.5)
