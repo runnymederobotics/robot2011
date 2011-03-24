@@ -83,7 +83,7 @@ public class RobotTemplate extends IterativeRobot {
     static final double FAST_MAX_ENCODER_RATE = 1700.0;
     //Speed to set the elevator motor to
     static final double ELEVATOR_SPEED_UP = 1.0;
-    static final double ELEVATOR_SPEED_DOWN = 0.5;
+    static final double ELEVATOR_SPEED_DOWN = 0.65;
     //Max drive motor speed
     static final double MAX_DRIVE_SPEED = 1.0;
     //Encoder counts per metre travelled
@@ -215,7 +215,7 @@ public class RobotTemplate extends IterativeRobot {
 
         //Initialize our pneumatics if we are using the practise robot or the real robot
         if(!PRACTISE_ROBOT) {
-            transShift = new Pneumatic(new Solenoid(8));
+            transShift = new Pneumatic(new Solenoid(4));
             elbowTop = new Pneumatic(new Solenoid(3));
             elbowBottom = new Pneumatic(new Solenoid(2));
             gripper = new Pneumatic(new Solenoid(1));
@@ -250,6 +250,8 @@ public class RobotTemplate extends IterativeRobot {
         //Input/output range for right encoder/motors
         pidRight.setInputRange(-SLOW_MAX_ENCODER_RATE, SLOW_MAX_ENCODER_RATE);
         pidRight.setOutputRange(-MAX_DRIVE_SPEED, MAX_DRIVE_SPEED);
+
+        pidGyro.enable();
 
         //Input/output range for the gyro PID
         pidGyro.setInputRange(-360.0, 360.0);
@@ -310,7 +312,6 @@ public class RobotTemplate extends IterativeRobot {
         transShift.set(!PRACTISE_ROBOT);
 
         //Reset gyro and enable PID on gyro
-        pidGyro.enable();
         gyro.reset();
 
         //Enable PID on wheels
@@ -490,16 +491,18 @@ public class RobotTemplate extends IterativeRobot {
                         else if (direction == -1) {
                             leftDone  = -encLeft.encoder.get() <= currentStep.get();
                             rightDone = encRight.encoder.get() <= currentStep.get();
+                            if(-encLeft.encoder.get() <= currentStep.get() * 0.25 && encRight.encoder.get() <= currentStep.get() * 0.25)
+                                setElbow(ElbowState.Vertical);
                         }
 
                         //Drive each side until we reach the value for each side
-                        robotDrive.arcadeDrive(direction * 0.65, gyroPID(true, 0.0));
+                        robotDrive.arcadeDrive(direction * 0.85, gyroPID(true, 0.0));
                         if(!leftDone)
-                            pidLeft.setSetpoint(direction * -storageLeft.get() * SLOW_MAX_ENCODER_RATE);
+                            pidLeft.setSetpoint(-storageLeft.get() * SLOW_MAX_ENCODER_RATE);
                         else
                             pidLeft.disable();
                         if(!rightDone)
-                            pidRight.setSetpoint(direction * -storageRight.get() * SLOW_MAX_ENCODER_RATE);
+                            pidRight.setSetpoint(-storageRight.get() * SLOW_MAX_ENCODER_RATE);
                         else
                             pidRight.disable();
 
@@ -548,7 +551,6 @@ public class RobotTemplate extends IterativeRobot {
                             setElbow(ElbowState.Middle);
                             Timer.delay(AUTONOMOUS_RELEASE_DELAY);
                             releaseTube();
-                            Timer.delay(1000);
                             elevatorSetpoint = ElevatorSetpoint.ground;
                         }
                         ++stepIndex;
@@ -730,12 +732,12 @@ public class RobotTemplate extends IterativeRobot {
         //Drive arcade or tank based on the state of the toggle
         if(arcadeToggle.get()) {
             //If PID is disabled
-            if(!pidLeft.isEnable() || !pidRight.isEnable()) {
+            if((!pidLeft.isEnable() || !pidRight.isEnable()) && doPID) {
                 //Enable PID
                 pidLeft.enable();
                 pidRight.enable();
             }
-            if(pidLeft.isEnable() || pidRight.isEnable() && !doPID) {
+            if((pidLeft.isEnable() || pidRight.isEnable()) && !doPID) {
                 pidLeft.disable();
                 pidRight.disable();
             }
@@ -758,14 +760,14 @@ public class RobotTemplate extends IterativeRobot {
                 jagRight.set(storageRight.get());
             }
         }
-        else if(!arcadeToggle.get()) {
+        else {
             //If PID is disabled
-            if(!pidLeft.isEnable() || !pidRight.isEnable() && doPID) {
+            if((!pidLeft.isEnable() || !pidRight.isEnable()) && doPID) {
                 //Enable PID
                 pidLeft.enable();
                 pidRight.enable();
             }
-            if(pidLeft.isEnable() || pidRight.isEnable() && !doPID) {
+            if((pidLeft.isEnable() || pidRight.isEnable()) && !doPID) {
                 pidLeft.disable();
                 pidRight.disable();
             }
@@ -863,7 +865,7 @@ public class RobotTemplate extends IterativeRobot {
             if(gyroCounter >= 100)
                 ++stepIndex;
             //We are turning on the spot so the turning speed is high
-            final double speed = 0.25;
+            final double speed = 0.5;
             jagLeft.set(delta >= 0 ? -speed : speed);
             jagRight.set(delta >= 0 ? -speed : speed);
             return 0.0;
