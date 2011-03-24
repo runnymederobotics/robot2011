@@ -83,7 +83,7 @@ public class RobotTemplate extends IterativeRobot {
     static final double FAST_MAX_ENCODER_RATE = 1700.0;
     //Speed to set the elevator motor to
     static final double ELEVATOR_SPEED_UP = 1.0;
-    static final double ELEVATOR_SPEED_DOWN = -0.7;
+    static final double ELEVATOR_SPEED_DOWN = 0.5;
     //Max drive motor speed
     static final double MAX_DRIVE_SPEED = 1.0;
     //Encoder counts per metre travelled
@@ -158,8 +158,8 @@ public class RobotTemplate extends IterativeRobot {
     PIDEncoder encElevator;
     PIDEncoder encRight;
 
-    DigitalInput elevatorLimit = new DigitalInput(9);
-    DigitalInput minibotLimit = new DigitalInput(10);
+    DigitalInput elevatorLimit = new DigitalInput(8);
+    DigitalInput minibotLimit = new DigitalInput(7);
     DigitalInput rightSensor = new DigitalInput(11);
     DigitalInput middleSensor = new DigitalInput(12);
     DigitalInput leftSensor = new DigitalInput(13);
@@ -182,6 +182,7 @@ public class RobotTemplate extends IterativeRobot {
     Toggle gripperToggle = new Toggle(false);
     //Toggle for arcade/tank drive
     Toggle arcadeToggle = new Toggle(true);
+    Toggle minibotToggle = new Toggle(false);
     
     //State of elbow
     int elbowState;
@@ -196,7 +197,7 @@ public class RobotTemplate extends IterativeRobot {
 
         if(!PRACTISE_ROBOT) {
             encLeft = new PIDEncoder(true, 3, 4, true);
-            encNull = new Encoder(7, 8);
+            encNull = new Encoder(9, 14);
             encElevator = new PIDEncoder(false, 5, 6, true);
             encRight = new PIDEncoder(true, 1, 2, true);
         }
@@ -306,7 +307,7 @@ public class RobotTemplate extends IterativeRobot {
         minibotServo.set(0);
 
         //Default to slow driving mode
-        transShift.set(false);
+        transShift.set(!PRACTISE_ROBOT);
 
         //Reset gyro and enable PID on gyro
         pidGyro.enable();
@@ -476,14 +477,14 @@ public class RobotTemplate extends IterativeRobot {
                 switch(currentStep.type) {
                     //If we want to drive forward
                     case AutonomousState.Driving:
-                        int direction = currentStep.get() > 0 ? 1 : -1;
+                        int direction = currentStep.get() > 0 ? 1 : currentStep.get() < 0 ? -1 : 0;
                         //If we have reached our value for this step on the left or right side
                         boolean leftDone = false;
                         boolean rightDone = false;
 
                         if(direction == 1) {
                             final double distance = ultrasonicSensor.getVoltage() / ULTRASONIC_VOLTS_PER_INCH;
-                            leftDone = -encLeft.encoder.get() >= currentStep.get() || distance <= MAX_SCORING_DISTANCE; //Midpoint
+                            leftDone = -encLeft.encoder.get() >= currentStep.get() || distance <= MAX_SCORING_DISTANCE;
                             rightDone = encRight.encoder.get() >= currentStep.get() || distance <= MAX_SCORING_DISTANCE;
                         }
                         else if (direction == -1) {
@@ -542,6 +543,8 @@ public class RobotTemplate extends IterativeRobot {
                     //To release the tube
                     case AutonomousState.Release:
                         if(releaseTube) {
+                            pidLeft.disable();
+                            pidRight.disable();
                             setElbow(ElbowState.Middle);
                             Timer.delay(AUTONOMOUS_RELEASE_DELAY);
                             releaseTube();
@@ -596,18 +599,12 @@ public class RobotTemplate extends IterativeRobot {
 
     //Start time for teleoperated mode
     double teleopStartTime;
-    //Start time for when the minibot release is triggered
-    double minibotServoTime;
-    //Releasing minibot
-    boolean releaseMinibot;
     int lightState = Lights.Off;
 
     //Runs at the beginning of teleoperated period
     public void teleopInit() {
         //Initialize variables
         teleopStartTime = Timer.getFPGATimestamp();
-        minibotServoTime = 0.0;
-        releaseMinibot = false;
 
         //Minibot defaults to in
         minibotRelease.set(false);
@@ -672,7 +669,9 @@ public class RobotTemplate extends IterativeRobot {
         if(manualElevatorToggle.get()) {
             double axis = stickOperator.getAxis(Joystick.AxisType.kY);
             if(!elevatorLimit.get())
-                axis = -Math.abs(axis);
+                axis = Math.max(axis, 0);
+            if(axis > 0)
+                axis *= ELEVATOR_SPEED_DOWN;
             vicElevator.set(axis);
         } else {
             elevatorPID();
@@ -699,7 +698,7 @@ public class RobotTemplate extends IterativeRobot {
         //transState = false;
 
         //Set the transmission shifter to open or closed based on the state of the toggle
-        transShift.set(transState);
+        transShift.set(PRACTISE_ROBOT ? transState : !transState);
 
         //Determine the input range to use (max encoder rate) to use depending on the transmission state we are in
         double maxEncoderRate = transState ? FAST_MAX_ENCODER_RATE : SLOW_MAX_ENCODER_RATE;
@@ -794,24 +793,12 @@ public class RobotTemplate extends IterativeRobot {
 
         //If there are 10 seconds left
         if(finale) {
-            //If we triggered the release, set the release to true, otherwise just leave it
-            //Creates a one-way toggle
-            releaseMinibot = stickOperator.getRawButton(Operator.MINIBOT_RELEASE_ONE) && stickOperator.getRawButton(Operator.MINIBOT_RELEASE_TWO) ? true : releaseMinibot;
-            //If we want to release
-            if(releaseMinibot) {
-                //Set the vertical relay to released
-                minibotRelease.set(true);
-                //If the release time is 0 (we haven't set the release time yet) then set the release time
-                //Allows us to set the release time only once
-                minibotServoTime = minibotServoTime == 0.0 ? Timer.getFPGATimestamp() : minibotServoTime;
-                
-                //if(Timer.getFPGATimestamp() - minibotServoTime >= MINIBOT_SERVO_DELAY) {
-                    //Set the horizontal relay to released
-                    //if(stickOperator.getRawButton(Operator.MINIBOT_SERVO_RELEASE))
-                if(minibotLimit.get()) {
+            minibotToggle.feed(stickOperator.getRawButton(Operator.MINIBOT_RELEASE_ONE) && stickOperator.getRawButton(Operator.MINIBOT_RELEASE_TWO));
+
+            minibotRelease.set(minibotToggle.get());
+
+            if(minibotToggle.get() && !minibotLimit.get()) //Minibot limit switch is engaged when false
                     minibotServo.set(255);
-                }
-            }
         }
     }
 
@@ -828,7 +815,7 @@ public class RobotTemplate extends IterativeRobot {
         if(error > 0 && error > toleranceWhileGoingUp)
             vicElevator.set(ELEVATOR_SPEED_UP);
         else if(error < 0 && error < toleranceWhileGoingDown && elevatorLimit.get()) //Cant go down unless elevator limit is disengaged
-            vicElevator.set(ELEVATOR_SPEED_DOWN);
+            vicElevator.set(-ELEVATOR_SPEED_DOWN);
         else {
             vicElevator.set(0.0);
             return true;
@@ -982,6 +969,7 @@ public class RobotTemplate extends IterativeRobot {
             System.out.println("rightSensor: " + rightSensor.get() + " middleSensor: " + middleSensor.get() + " leftSensor: " + leftSensor.get());
             System.out.println("light: " + lightState);
             System.out.println("ultrasonic distance: " + ultrasonicSensor.getVoltage() / ULTRASONIC_VOLTS_PER_INCH);
+            System.out.println("limitelev: " + elevatorLimit.get() + " minibotlimit: " + minibotLimit.get());
             //Update the last print time
             lastPrintTime = curPrintTime;
         }
