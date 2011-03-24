@@ -83,7 +83,7 @@ public class RobotTemplate extends IterativeRobot {
     static final double FAST_MAX_ENCODER_RATE = 1700.0;
     //Speed to set the elevator motor to
     static final double ELEVATOR_SPEED_UP = 1.0;
-    static final double ELEVATOR_SPEED_DOWN = 0.65;
+    static final double ELEVATOR_SPEED_DOWN = 0.75;
     //Max drive motor speed
     static final double MAX_DRIVE_SPEED = 1.0;
     //Encoder counts per metre travelled
@@ -800,7 +800,7 @@ public class RobotTemplate extends IterativeRobot {
             minibotRelease.set(minibotToggle.get());
 
             if(minibotToggle.get() && !minibotLimit.get()) //Minibot limit switch is engaged when false
-                    minibotServo.set(255);
+                minibotServo.set(255);
         }
     }
 
