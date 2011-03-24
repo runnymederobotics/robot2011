@@ -76,7 +76,7 @@ class Lights {
 
 public class RobotTemplate extends IterativeRobot {
     //Practise robot or competition robot
-    static final boolean PRACTISE_ROBOT = true;
+    static final boolean PRACTISE_ROBOT = false;
     //Encoder rate at max speed in slow gear
     static final double SLOW_MAX_ENCODER_RATE = 750.0;
     //Encoder rate at max speed in fast gear
@@ -158,6 +158,8 @@ public class RobotTemplate extends IterativeRobot {
     PIDEncoder encElevator;
     PIDEncoder encRight;
 
+    DigitalInput elevatorLimit = new DigitalInput(9);
+    DigitalInput minibotLimit = new DigitalInput(10);
     DigitalInput rightSensor = new DigitalInput(11);
     DigitalInput middleSensor = new DigitalInput(12);
     DigitalInput leftSensor = new DigitalInput(13);
@@ -183,6 +185,7 @@ public class RobotTemplate extends IterativeRobot {
     
     //State of elbow
     int elbowState;
+    int lastElbowState;
 
     //The elevator setpoint, determined by which button on the operator joystick is pressed
     double elevatorSetpoint = ElevatorSetpoint.ground;
@@ -277,7 +280,6 @@ public class RobotTemplate extends IterativeRobot {
 
     boolean doNothing;
     boolean trackLine;
-    boolean steal = true;
     boolean heightOne;
     boolean heightTwo;
     boolean heightThree;
@@ -480,8 +482,9 @@ public class RobotTemplate extends IterativeRobot {
                         boolean rightDone = false;
 
                         if(direction == 1) {
-                            leftDone  = -encLeft.encoder.get() >= currentStep.get();
-                            rightDone = encRight.encoder.get() >= currentStep.get();
+                            final double distance = ultrasonicSensor.getVoltage() / ULTRASONIC_VOLTS_PER_INCH;
+                            leftDone = -encLeft.encoder.get() >= currentStep.get() || distance <= MAX_SCORING_DISTANCE; //Midpoint
+                            rightDone = encRight.encoder.get() >= currentStep.get() || distance <= MAX_SCORING_DISTANCE;
                         }
                         else if (direction == -1) {
                             leftDone  = -encLeft.encoder.get() <= currentStep.get();
@@ -489,7 +492,7 @@ public class RobotTemplate extends IterativeRobot {
                         }
 
                         //Drive each side until we reach the value for each side
-                        robotDrive.arcadeDrive(0.65, gyroPID(true, 0.0));
+                        robotDrive.arcadeDrive(direction * 0.65, gyroPID(true, 0.0));
                         if(!leftDone)
                             pidLeft.setSetpoint(direction * -storageLeft.get() * SLOW_MAX_ENCODER_RATE);
                         else
@@ -667,7 +670,10 @@ public class RobotTemplate extends IterativeRobot {
         manualElevatorToggle.feed(!finale && stickOperator.getRawButton(Operator.ELEVATOR_MANUAL_TOGGLE));
         //Manual or automated elevator control
         if(manualElevatorToggle.get()) {
-            vicElevator.set(stickOperator.getAxis(Joystick.AxisType.kY));
+            double axis = stickOperator.getAxis(Joystick.AxisType.kY);
+            if(!elevatorLimit.get())
+                axis = -Math.abs(axis);
+            vicElevator.set(axis);
         } else {
             elevatorPID();
         }
@@ -678,13 +684,16 @@ public class RobotTemplate extends IterativeRobot {
         final double LOW_SPEED_PERCENT = 0.9;
         final double HIGH_SPEED_PERCENT = 0.6;
 
-        if(!transState)
-            transState = rate >= LOW_SPEED_PERCENT * SLOW_MAX_ENCODER_RATE && Math.abs(stickDriver.getRawAxis(Driver.Y_AXIS_LEFT)) >= LOW_SPEED_PERCENT ? true : transState;
-        else if(transState)
-            transState = rate <= HIGH_SPEED_PERCENT * FAST_MAX_ENCODER_RATE && Math.abs(stickDriver.getRawAxis(Driver.Y_AXIS_LEFT)) <= HIGH_SPEED_PERCENT ? false : transState;
-
-        transState = stickDriver.getRawButton(Driver.TRANS_TOGGLE_LOW) ? false : transState;
-        transState = stickDriver.getRawButton(Driver.TRANS_TOGGLE_HIGH) ? true : transState;
+        if(elbowState == ElbowState.Vertical) {
+            if(!transState)
+                transState = rate >= LOW_SPEED_PERCENT * SLOW_MAX_ENCODER_RATE && Math.abs(stickDriver.getRawAxis(Driver.Y_AXIS_LEFT)) >= LOW_SPEED_PERCENT ? true : transState;
+            else if(transState)
+                transState = rate <= HIGH_SPEED_PERCENT * FAST_MAX_ENCODER_RATE && Math.abs(stickDriver.getRawAxis(Driver.Y_AXIS_LEFT)) <= HIGH_SPEED_PERCENT ? false : transState;
+            transState = stickDriver.getRawButton(Driver.TRANS_TOGGLE_LOW) ? false : transState;
+            transState = stickDriver.getRawButton(Driver.TRANS_TOGGLE_HIGH) ? true : transState;
+        }
+        else
+            transState = false; //Low gear
 
         //TODO: the following line was a hack to make the test robot work. remove it
         //transState = false;
@@ -711,6 +720,9 @@ public class RobotTemplate extends IterativeRobot {
         else
             elbowState = ElbowState.Middle;
         setElbow(elbowState);
+        if(elbowState == ElbowState.Horizontal && lastElbowState == ElbowState.Middle)
+            gripperToggle.set(true);
+        lastElbowState = elbowState;
 
         //Feed the toggle on the arcade/tank drive button
         arcadeToggle.feed(stickDriver.getRawButton(Driver.ARCADE_TOGGLE));
@@ -792,10 +804,11 @@ public class RobotTemplate extends IterativeRobot {
                 //If the release time is 0 (we haven't set the release time yet) then set the release time
                 //Allows us to set the release time only once
                 minibotServoTime = minibotServoTime == 0.0 ? Timer.getFPGATimestamp() : minibotServoTime;
-                //If it's been at least 2 seconds since the release was triggered
-                if(Timer.getFPGATimestamp() - minibotServoTime >= MINIBOT_SERVO_DELAY) {
+                
+                //if(Timer.getFPGATimestamp() - minibotServoTime >= MINIBOT_SERVO_DELAY) {
                     //Set the horizontal relay to released
                     //if(stickOperator.getRawButton(Operator.MINIBOT_SERVO_RELEASE))
+                if(minibotLimit.get()) {
                     minibotServo.set(255);
                 }
             }
@@ -814,7 +827,7 @@ public class RobotTemplate extends IterativeRobot {
         //Go up when below setpoint, down when above setpoint
         if(error > 0 && error > toleranceWhileGoingUp)
             vicElevator.set(ELEVATOR_SPEED_UP);
-        else if(error < 0 && error < toleranceWhileGoingDown)
+        else if(error < 0 && error < toleranceWhileGoingDown && elevatorLimit.get()) //Cant go down unless elevator limit is disengaged
             vicElevator.set(ELEVATOR_SPEED_DOWN);
         else {
             vicElevator.set(0.0);
