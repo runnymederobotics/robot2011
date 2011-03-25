@@ -61,10 +61,9 @@ class ElbowState {
 class AutonomousState {
     static final int Driving = 0;
     static final int Turning = 1;
-    static final int Reset = 2;
-    static final int Release = 3;
-    static final int Done = 4;
-    static final int Sleep = 5;
+    static final int Release = 2;
+    static final int Done = 3;
+    static final int Sleep = 4;
 }
 
 class Lights {
@@ -140,15 +139,13 @@ public class RobotTemplate extends IterativeRobot {
     //Jaguars
     Jaguar jagLeft = new Jaguar(1);
     Jaguar jagRight = new Jaguar(2);
+    Jaguar jagElevator = new Jaguar(3);
 
     //Stores output from robotDrive
     OutputStorage storageLeft = new OutputStorage();
     OutputStorage storageRight = new OutputStorage();
 
-    //DI 3 doesn't work
-
-    //Victors
-    Victor vicElevator = new Victor(3);
+    //DI 3 doesn't work    
 
     Servo minibotServo = new Servo(4);
 
@@ -542,12 +539,6 @@ public class RobotTemplate extends IterativeRobot {
                             gyroPID(false, currentStep.get());
                         }
                         break;
-                    case AutonomousState.Reset:
-                        setElbow(ElbowState.Vertical);
-                        elevatorSetpoint = ElevatorSetpoint.ground;
-                        if(elevatorPID())
-                            ++stepIndex;
-                        break;
                     //To release the tube
                     case AutonomousState.Release:
                         if(releaseTube) {
@@ -591,7 +582,7 @@ public class RobotTemplate extends IterativeRobot {
                 encLeft.reset();
                 encRight.reset();
                 gyro.reset();
-                vicElevator.set(0.0);
+                jagElevator.set(0.0);
                 //Stop
                 pidLeft.enable();
                 pidRight.enable();
@@ -684,7 +675,7 @@ public class RobotTemplate extends IterativeRobot {
                 axis = Math.max(axis, 0);
             if(axis > 0)
                 axis *= ELEVATOR_SPEED_DOWN;
-            vicElevator.set(axis);
+            jagElevator.set(axis);
         } else {
             elevatorPID();
         }
@@ -705,9 +696,6 @@ public class RobotTemplate extends IterativeRobot {
         }
         else
             transState = false; //Low gear
-
-        //TODO: the following line was a hack to make the test robot work. remove it
-        //transState = false;
 
         //Set the transmission shifter to open or closed based on the state of the toggle
         transShift.set(PRACTISE_ROBOT ? transState : !transState);
@@ -736,7 +724,7 @@ public class RobotTemplate extends IterativeRobot {
         lastElbowState = elbowState;
 
         //Feed the toggle on the arcade/tank drive button
-        arcadeToggle.feed(stickDriver.getRawButton(Driver.ARCADE_TOGGLE));
+        //arcadeToggle.feed(stickDriver.getRawButton(Driver.ARCADE_TOGGLE));
 
         final boolean doPID = false;
         //Drive arcade or tank based on the state of the toggle
@@ -825,11 +813,11 @@ public class RobotTemplate extends IterativeRobot {
 
         //Go up when below setpoint, down when above setpoint
         if(error > 0 && error > toleranceWhileGoingUp)
-            vicElevator.set(ELEVATOR_SPEED_UP);
+            jagElevator.set(ELEVATOR_SPEED_UP);
         else if(error < 0 && error < toleranceWhileGoingDown && elevatorLimit.get()) //Cant go down unless elevator limit is disengaged
-            vicElevator.set(-ELEVATOR_SPEED_DOWN);
+            jagElevator.set(-ELEVATOR_SPEED_DOWN);
         else {
-            vicElevator.set(0.0);
+            jagElevator.set(0.0);
             return true;
         }
         return false;
@@ -875,7 +863,7 @@ public class RobotTemplate extends IterativeRobot {
             if(gyroCounter >= 100)
                 ++stepIndex;
             //We are turning on the spot so the turning speed is high
-            final double speed = 0.5;
+            final double speed = 0.85;
             jagLeft.set(delta >= 0 ? -speed : speed);
             jagRight.set(delta >= 0 ? -speed : speed);
             return 0.0;
