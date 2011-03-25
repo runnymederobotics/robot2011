@@ -308,6 +308,11 @@ public class RobotTemplate extends IterativeRobot {
         minibotRelease.set(false);
         minibotServo.set(0);
 
+        manualElevatorToggle.set(false);
+        gripperToggle.set(false);
+        arcadeToggle.set(true);
+        minibotToggle.set(false);
+
         //Default to slow driving mode
         transShift.set(!PRACTISE_ROBOT);
 
@@ -339,7 +344,7 @@ public class RobotTemplate extends IterativeRobot {
             stepList = new Step[] {
                 new Step(AutonomousState.Driving, AUTONOMOUS_DRIVE_COUNTS),
                 new Step(AutonomousState.Release),
-                new Step(AutonomousState.Driving, reverse ? -AUTONOMOUS_DRIVE_COUNTS : 0),
+                new Step(AutonomousState.Driving, reverse ? -AUTONOMOUS_DRIVE_COUNTS * 0.75 : 0),
                 new Step(AutonomousState.Turning, reverse ? 180 : 0),
                 new Step(AutonomousState.Done),
             };
@@ -611,6 +616,11 @@ public class RobotTemplate extends IterativeRobot {
         //Minibot defaults to in
         minibotRelease.set(false);
         minibotServo.set(0);
+
+        manualElevatorToggle.set(false);
+        gripperToggle.set(false);
+        arcadeToggle.set(true);
+        minibotToggle.set(false);
     }
 
     //Runs periodically during teleoperated period
@@ -972,6 +982,7 @@ public class RobotTemplate extends IterativeRobot {
             System.out.println("light: " + lightState);
             System.out.println("ultrasonic distance: " + ultrasonicSensor.getVoltage() / ULTRASONIC_VOLTS_PER_INCH);
             System.out.println("limitelev: " + elevatorLimit.get() + " minibotlimit: " + minibotLimit.get());
+            System.out.println("minibotRelease: " + minibotToggle.get());
             //Update the last print time
             lastPrintTime = curPrintTime;
         }
