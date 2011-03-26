@@ -96,10 +96,10 @@ public class RobotTemplate extends IterativeRobot {
     //Tolerance for the gyro pid
     static final double GYRO_TOLERANCE = 5.0;
     //Delay between
-    static final double AUTONOMOUS_RELEASE_DELAY = 0.5;
+    static final double AUTONOMOUS_RELEASE_DELAY = 1.0;
     //Print delay
     static final double PRINT_DELAY = 0.5;
-    static final int AUTONOMOUS_DRIVE_COUNTS = 2600;
+    static final int AUTONOMOUS_DRIVE_COUNTS = 2500;
 
     //distance in inches for scoring/feeding
     static final double MIN_SCORING_DISTANCE = 30.0;
@@ -486,7 +486,7 @@ public class RobotTemplate extends IterativeRobot {
                         boolean rightDone = false;
 
                         if(direction == 1) {
-                            final double distance = ultrasonicSensor.getVoltage() / ULTRASONIC_VOLTS_PER_INCH;
+                            final double distance = 100;//ultrasonic override//ultrasonicSensor.getVoltage() / ULTRASONIC_VOLTS_PER_INCH;
                             leftDone = -encLeft.encoder.get() >= currentStep.get() || distance <= MAX_SCORING_DISTANCE;
                             rightDone = encRight.encoder.get() >= currentStep.get() || distance <= MAX_SCORING_DISTANCE;
                         }
@@ -548,6 +548,7 @@ public class RobotTemplate extends IterativeRobot {
                             Timer.delay(AUTONOMOUS_RELEASE_DELAY);
                             releaseTube();
                             elevatorSetpoint = ElevatorSetpoint.ground;
+                            Timer.delay(AUTONOMOUS_RELEASE_DELAY);
                         }
                         ++stepIndex;
                         break;
