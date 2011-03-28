@@ -113,14 +113,14 @@ public class RobotTemplate extends IterativeRobot {
     static final double ULTRASONIC_VOLTS_PER_INCH = 0.0098;
 
     //Driver station
-    DriverStation ds = DriverStation.getInstance();
+    DriverStation ds;
 
     //Joysticks
-    Joystick stickDriver = new Joystick(1);
-    Joystick stickOperator = new Joystick(2);
+    Joystick stickDriver;
+    Joystick stickOperator;
 
     //Compressor, switch is DI 10, spike is relay 1
-    Compressor compressor = new Compressor(10, 1);
+    Compressor compressor;
 
     Pneumatic lightsOne;
     Pneumatic lightsTwo;
@@ -134,21 +134,21 @@ public class RobotTemplate extends IterativeRobot {
     Pneumatic minibotRelease;
 
     //Gyro
-    Gyro gyro = new Gyro(1);
-    PIDOutputStorage gyroOutput = new PIDOutputStorage();
+    Gyro gyro;
+    PIDOutputStorage gyroOutput;
 
     //Jaguars
-    Jaguar jagLeft = new Jaguar(1);
-    Jaguar jagRight = new Jaguar(2);
-    Jaguar jagElevator = new Jaguar(3);
+    Jaguar jagLeft;
+    Jaguar jagRight;
+    Jaguar jagElevator;
 
     //Stores output from robotDrive
-    OutputStorage storageLeft = new OutputStorage();
-    OutputStorage storageRight = new OutputStorage();
+    OutputStorage storageLeft;
+    OutputStorage storageRight;
 
     //DI 3 doesn't work    
 
-    Servo minibotServo = new Servo(4);
+    Servo minibotServo;
 
     //Encoders
     PIDEncoder encLeft;
@@ -156,16 +156,16 @@ public class RobotTemplate extends IterativeRobot {
     PIDEncoder encElevator;
     PIDEncoder encRight;
 
-    DigitalInput elevatorLimit = new DigitalInput(8);
-    DigitalInput minibotLimit = new DigitalInput(7);
-    DigitalInput rightSensor = new DigitalInput(11);
-    DigitalInput middleSensor = new DigitalInput(12);
-    DigitalInput leftSensor = new DigitalInput(13);
+    DigitalInput elevatorLimit;
+    DigitalInput minibotLimit;
+    DigitalInput rightSensor;
+    DigitalInput middleSensor;
+    DigitalInput leftSensor;
 
-    AnalogChannel ultrasonicSensor = new AnalogChannel(2);
+    AnalogChannel ultrasonicSensor;
 
     //Provides drive functions (arcade and tank drive)
-    RobotDrive robotDrive = new RobotDrive(storageLeft, storageRight);
+    RobotDrive robotDrive;
 
     //PIDs
     PIDController pidLeft;
@@ -175,22 +175,61 @@ public class RobotTemplate extends IterativeRobot {
     boolean transState;
 
     //Toggle for manual or automated elevator control
-    Toggle manualElevatorToggle = new Toggle(false);
+    Toggle manualElevatorToggle;
     //Toggle for the gripper
-    Toggle gripperToggle = new Toggle(false);
+    Toggle gripperToggle;
     //Toggle for arcade/tank drive
-    Toggle arcadeToggle = new Toggle(true);
-    Toggle minibotToggle = new Toggle(false);
+    Toggle arcadeToggle;
+    Toggle minibotToggle;
     
     //State of elbow
     int elbowState;
     int lastElbowState;
 
     //The elevator setpoint, determined by which button on the operator joystick is pressed
-    double elevatorSetpoint = ElevatorSetpoint.ground;
+    double elevatorSetpoint;
 
     //Runs when the robot is turned
     public void robotInit() {
+        ds = DriverStation.getInstance();
+        
+        stickDriver = new Joystick(1);
+        stickOperator = new Joystick(2);
+        
+        //Compressor, switch is DI 10, spike is relay 1
+        compressor = new Compressor(10, 1);
+        compressor.start();
+        
+        gyro = new Gyro(1);
+        
+        gyroOutput = new PIDOutputStorage();
+        
+        jagLeft = new Jaguar(1);
+        jagRight = new Jaguar(2);
+        jagElevator = new Jaguar(3);
+        
+        storageLeft = new OutputStorage();
+        storageRight = new OutputStorage();
+        
+        minibotServo = new Servo(4);
+        
+        elevatorLimit = new DigitalInput(8);
+        minibotLimit = new DigitalInput(7);
+        rightSensor = new DigitalInput(11);
+        middleSensor = new DigitalInput(12);
+        leftSensor = new DigitalInput(13);
+        
+        ultrasonicSensor = new AnalogChannel(2);
+        
+        robotDrive = new RobotDrive(storageLeft, storageRight);
+        
+        manualElevatorToggle = new Toggle(false);
+        gripperToggle = new Toggle(false);
+        arcadeToggle = new Toggle(true);
+        minibotToggle = new Toggle(false);
+        
+        elevatorSetpoint = ElevatorSetpoint.ground;
+        
         transState = false;
 
         if(!PRACTISE_ROBOT) {
@@ -254,9 +293,6 @@ public class RobotTemplate extends IterativeRobot {
         //Input/output range for the gyro PID
         pidGyro.setInputRange(-360.0, 360.0);
         pidGyro.setOutputRange(-0.5, 0.5);
-
-        //Start the compressor
-        compressor.start();
     }
 
     //Runs at the beginning of disabled period
@@ -599,7 +635,8 @@ public class RobotTemplate extends IterativeRobot {
 
     //Start time for teleoperated mode
     double teleopStartTime;
-    int lightState = Lights.Off;
+    int lightState;
+    int lastColor;
 
     //Runs at the beginning of teleoperated period
     public void teleopInit() {
@@ -614,6 +651,9 @@ public class RobotTemplate extends IterativeRobot {
         gripperToggle.set(false);
         arcadeToggle.set(true);
         minibotToggle.set(false);
+        
+        lightState = Lights.Off;
+        lastColor = Lights.Off;
     }
 
     //Runs periodically during teleoperated period
@@ -621,8 +661,6 @@ public class RobotTemplate extends IterativeRobot {
         //Call our print function with the current mode
         print("Teleoperated");
     }
-
-    int lastColor = Lights.Off;
 
     //Runs continuously during teleoperated period
     public void teleopContinuous() {
