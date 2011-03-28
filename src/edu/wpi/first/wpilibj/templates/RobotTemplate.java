@@ -90,6 +90,7 @@ public class RobotTemplate extends IterativeRobot {
     //Number of elevator encoder counts
     static final int MAX_ELEVATOR_COUNTS = 2400;
     //Number of seconds to wait in teleoperated mode before the minibot is allowed to be deployed
+    static final double MINIBOT_DEPLOYMENT_TIME = 105.0;
     static final double MINIBOT_RELEASE_TIME = 110.0;
     //Number of seconds after the minibot drops before we send it out horizontally
     static final double MINIBOT_SERVO_DELAY = 0.5;
@@ -629,6 +630,7 @@ public class RobotTemplate extends IterativeRobot {
         if(gyro.pidGet() < -360 || gyro.pidGet() > 360)
             gyro.reset();
 
+        boolean minibotDeploy = Timer.getFPGATimestamp() - teleopStartTime >= MINIBOT_DEPLOYMENT_TIME;
         boolean finale = Timer.getFPGATimestamp() - teleopStartTime >= MINIBOT_RELEASE_TIME;
         final double distance = ultrasonicSensor.getVoltage() / ULTRASONIC_VOLTS_PER_INCH;
         
@@ -792,15 +794,13 @@ public class RobotTemplate extends IterativeRobot {
             }
         }
 
-        //If there are 10 seconds left
-        if(finale) {
+        if(minibotDeploy) {
             minibotToggle.feed(stickOperator.getRawButton(Operator.MINIBOT_RELEASE_ONE) && stickOperator.getRawButton(Operator.MINIBOT_RELEASE_TWO));
-
             minibotRelease.set(minibotToggle.get());
-
-            if(minibotToggle.get() && !minibotLimit.get()) //Minibot limit switch is engaged when false
-                minibotServo.set(255);
         }
+        //If there are 10 seconds left
+        if(finale && minibotToggle.get() && !minibotLimit.get()) //Minibot limit switch is engaged when false
+            minibotServo.set(255);
     }
 
     //Returns whether or not the setpoint has been reached
@@ -856,9 +856,7 @@ public class RobotTemplate extends IterativeRobot {
             //The speed is incorporated into straight driving so it has to be low
             final double speed = 0.1;
             return delta > 0 ? -speed :speed;
-        }
-        //For turning on the spot
-        else {
+        } else {
             if(Math.abs(delta) < GYRO_TOLERANCE)
                 ++gyroCounter;
             if(gyroCounter >= 100)
